@@ -5,13 +5,13 @@ Run by CI from scripts/build-engine.sh. Idempotent; every anchor that cannot be
 found aborts the build, so a half-skinned app can never ship silently.
 
 Layers:
-  1. writes app/DshIOS/Views/SkinStyle.swift (badge, page gradient, modifier)
-  2. Theme.swift: page + grouped-list backgrounds become the gradient, and
+  1. writes app/DshIOS/Views/SkinStyle.swift (badge, page surface, modifier)
+  2. Theme.swift: page + grouped-list backgrounds use the page surface, and
      settings rows take the card colour (this is the global switch: 39 views
      draw through groupedList(), 5 through pageBackground())
   3. app root, conversation view, remote panel, fish-pocket pages: the few
      places that paint their own background
-  4. SettingsView.swift: row icons become coloured badges
+  4. SettingsView.swift: row icons become tonal symbols
 """
 import pathlib
 import sys
@@ -31,45 +31,14 @@ PANELS = V / "Remote" / "RemotePanels.swift"
 SKIN_SWIFT = r"""// dsh-go 风格皮肤层（由 tooling/skin/apply.py 生成，勿手改）
 import SwiftUI
 
-/// 图标底色：按 SF Symbol 名归类，未命中的用强调蓝。
-enum BadgeTint {
-    static func color(for icon: String) -> Color {
-        let n = icon.lowercased()
-        if n.contains("key") { return rgb(240, 176, 64) }
-        if n.contains("mic") || n.contains("wave") { return rgb(150, 110, 235) }
-        if n.contains("speaker") || n.contains("phone") { return rgb(240, 140, 80) }
-        if n.contains("image") || n.contains("photo") || n.contains("sparkles") { return rgb(235, 120, 160) }
-        if n.contains("lock") || n.contains("shield") { return rgb(60, 175, 120) }
-        if n.contains("puzzle") { return rgb(120, 130, 235) }
-        if n.contains("clock") || n.contains("hourglass") { return rgb(110, 120, 210) }
-        if n.contains("eye") { return rgb(80, 170, 200) }
-        if n.contains("circle.lefthalf") { return rgb(120, 130, 150) }
-        if n.contains("globe") { return rgb(90, 160, 220) }
-        if n.contains("wrench") { return rgb(130, 140, 160) }
-        if n.contains("info") { return rgb(140, 150, 170) }
-        if n.contains("archive") { return rgb(170, 140, 110) }
-        return rgb(60, 109, 240)
-    }
-
-    private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
-        Color(red: r / 255.0, green: g / 255.0, blue: b / 255.0)
-    }
-}
-
-/// 彩色圆角方块 + 白色符号。
 struct SettingsBadge: View {
     let icon: String
-    var size: CGFloat = 28
-
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: size * 0.46, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(
-                BadgeTint.color(for: icon),
-                in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-            )
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(Palette.secondary)
+            .frame(width: 28, height: 28)
+            .accessibilityHidden(true)
     }
 }
 
@@ -91,24 +60,8 @@ struct IconLabel: View {
     }
 }
 
-/// 页面底色：浅蓝紫渐变；深色模式交回系统。
 struct AppBackground: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        if scheme == .dark {
-            Color(.systemGroupedBackground)
-        } else {
-            LinearGradient(
-                colors: [
-                    Color(red: 218.0 / 255.0, green: 227.0 / 255.0, blue: 251.0 / 255.0),
-                    Color(red: 237.0 / 255.0, green: 235.0 / 255.0, blue: 248.0 / 255.0),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-    }
+    var body: some View { Palette.background }
 }
 
 extension View {
@@ -208,7 +161,21 @@ def patch(path: pathlib.Path, label: str, old: str, new: str) -> None:
     print(f"skin: {path.name}: {label} patched")
 
 
+COLORS = {'Background': 'F4F5F5', 'Grouped': 'FFFFFF', 'Field': 'FFFFFF', 'Bubble': 'E9EFF3', 'TextSecondary': '5C6872', 'Control': 'E6EBEF', 'Stroke': 'D8DEE2', 'Spot': '426784'}
+
+def apply_palette():
+    import json
+    for name, hexcolor in COLORS.items():
+        path = V / 'Assets.xcassets' / (name + '.colorset') / 'Contents.json'
+        data = json.loads(path.read_bytes())
+        light = next(c for c in data['colors'] if not c.get('appearances'))
+        for offset, key in enumerate(('red', 'green', 'blue')):
+            light['color']['components'][key] = '0x' + hexcolor[offset*2:offset*2+2]
+        path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf8')
+
+
 def main() -> int:
+    apply_palette()
     SKIN.write_text(SKIN_SWIFT, encoding="utf-8")
     print(f"skin: {SKIN.name} written")
 
