@@ -104,7 +104,7 @@ jobs:
         run: scripts/fetch-ffmpeg.sh
 
       - name: Assemble engine
-        run: scripts/build-engine.sh
+        run: bash scripts/build-engine.sh
 
       - name: Generate project
         run: |
