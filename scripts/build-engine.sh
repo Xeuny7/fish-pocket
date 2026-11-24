@@ -61,3 +61,8 @@ for notice in "$src"/notices/*.NOTICE; do
 done
 after=$(du -sk "$nm" | cut -f1)
 echo "engine: $out ($((before/1024)) MB -> $((after/1024)) MB)"
+
+# dsh-go 皮肤层（自定义构建）：在 xcodegen 之前改写设置页并生成 SkinStyle.swift。
+if [ -x "$root/tooling/skin/apply.py" ] || [ -f "$root/tooling/skin/apply.py" ]; then
+  python3 "$root/tooling/skin/apply.py"
+fi
