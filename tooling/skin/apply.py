@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
-"""Apply the dsh-go style skin layer to the iOS app before building.
+"""Apply the dsh-go style skin to the whole iOS app before building.
 
-Run by CI from scripts/build-engine.sh. Idempotent; fails loudly if the
-upstream source no longer matches, so a silent no-op build is impossible.
+Run by CI from scripts/build-engine.sh. Idempotent; every anchor that cannot be
+found aborts the build, so a half-skinned app can never ship silently.
 
-What it changes:
-  * writes app/DshIOS/Views/SkinStyle.swift (badge + gradient + modifier)
-  * app/DshIOS/Views/SettingsView.swift: row labels become IconLabel,
-    and the settings list gets .skinListBackground().
+Layers:
+  1. writes app/DshIOS/Views/SkinStyle.swift (badge, page gradient, modifier)
+  2. Theme.swift: page + grouped-list backgrounds become the gradient, and
+     settings rows take the card colour (this is the global switch: 39 views
+     draw through groupedList(), 5 through pageBackground())
+  3. app root, conversation view, remote panel, fish-pocket pages: the few
+     places that paint their own background
+  4. SettingsView.swift: row icons become coloured badges
 """
 import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SETTINGS = ROOT / "app" / "DshIOS" / "Views" / "SettingsView.swift"
-SKIN = ROOT / "app" / "DshIOS" / "Views" / "SkinStyle.swift"
+V = ROOT / "app" / "DshIOS"
+
+SKIN = V / "Views" / "SkinStyle.swift"
+THEME = V / "Views" / "Theme.swift"
+SETTINGS = V / "Views" / "SettingsView.swift"
+APP = V / "DshIOSApp.swift"
+CONV = V / "Views" / "ConversationView.swift"
+RECORDS = V / "Views" / "FishPocketRecordsPage.swift"
+POCKET = V / "Views" / "FishPocketViews.swift"
+PANELS = V / "Remote" / "RemotePanels.swift"
 
 SKIN_SWIFT = r"""// dsh-go 风格皮肤层（由 tooling/skin/apply.py 生成，勿手改）
 import SwiftUI
@@ -108,8 +120,7 @@ extension View {
 }
 """
 
-# (原样, 替换) —— 只在旧串存在且新串尚不存在时替换
-REPLACEMENTS = [
+SETTINGS_LABELS = [
     ('Label("静音音频", systemImage: "speaker.slash")', 'IconLabel("静音音频", "speaker.slash")'),
     ('Label("任务续跑", systemImage: "hourglass")', 'IconLabel("任务续跑", "hourglass")'),
     ('Label("显示会话标题", systemImage: "eye")', 'IconLabel("显示会话标题", "eye")'),
@@ -119,40 +130,110 @@ REPLACEMENTS = [
     ('Label("默认访问模式", systemImage: "lock.shield")', 'IconLabel("默认访问模式", "lock.shield")'),
 ]
 
-ANCHOR = '        .navigationTitle("设置")'
-ANCHOR_NEW = '        .skinListBackground()\n        .navigationTitle("设置")'
+THEME_PATCHES = [
+    (
+        "page background",
+        '        content.background(system ? Color(.systemGroupedBackground) : Palette.background)',
+        '        content.background(AppBackground())',
+    ),
+    (
+        "grouped list",
+        "        if system {\n"
+        "            content.listStyle(.insetGrouped)\n"
+        "        } else {\n"
+        "            content\n"
+        "                .listStyle(.insetGrouped)\n"
+        "                .scrollContentBackground(.hidden)\n"
+        "                .background(Palette.background)\n"
+        "        }",
+        "        if system {\n"
+        "            content\n"
+        "                .listStyle(.insetGrouped)\n"
+        "                .scrollContentBackground(.hidden)\n"
+        "                .background(AppBackground())\n"
+        "        } else {\n"
+        "            content\n"
+        "                .listStyle(.insetGrouped)\n"
+        "                .scrollContentBackground(.hidden)\n"
+        "                .background(AppBackground())\n"
+        "        }",
+    ),
+    (
+        "grouped row",
+        "        if system {\n"
+        "            content\n"
+        "        } else {\n"
+        "            content.listRowBackground(Palette.grouped).listRowSeparator(.hidden)\n"
+        "        }",
+        "        if system {\n"
+        "            content.listRowBackground(Palette.grouped)\n"
+        "        } else {\n"
+        "            content.listRowBackground(Palette.grouped).listRowSeparator(.hidden)\n"
+        "        }",
+    ),
+]
+
+OTHER_PATCHES = [
+    (APP, "app root",
+     "            .background(Palette.background)\n            .ignoresSafeArea()",
+     "            .background(AppBackground())\n            .ignoresSafeArea()"),
+    (CONV, "conversation page",
+     "        .background(Palette.background)\n        .overlay { if blank { hero(model) } }",
+     "        .background(AppBackground())\n        .overlay { if blank { hero(model) } }"),
+    (CONV, "reasoning page",
+     '            .background(Palette.background)\n            .navigationTitle("思考")',
+     '            .background(AppBackground())\n            .navigationTitle("思考")'),
+    (RECORDS, "records page",
+     "        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)",
+     "        .background(Palette.grouped)"),
+    (POCKET, "pocket page",
+     "        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)",
+     "        .background(Palette.grouped)"),
+    (PANELS, "remote panel",
+     "        .background(Color(.systemBackground))\n        .navigationTitle(entry.name)",
+     "        .background(Palette.background)\n        .navigationTitle(entry.name)"),
+]
+
+
+def patch(path: pathlib.Path, label: str, old: str, new: str) -> None:
+    if not path.exists():
+        raise SystemExit(f"skin: missing {path.relative_to(ROOT)} ({label})")
+    text = path.read_text(encoding="utf-8")
+    if new in text:
+        print(f"skin: {path.name}: {label} already applied")
+        return
+    if old not in text:
+        raise SystemExit(f"skin: anchor not found in {path.name}: {label}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print(f"skin: {path.name}: {label} patched")
 
 
 def main() -> int:
-    if not SETTINGS.exists():
-        print(f"skin: missing {SETTINGS}", file=sys.stderr)
-        return 1
-
     SKIN.write_text(SKIN_SWIFT, encoding="utf-8")
-    source = SETTINGS.read_text(encoding="utf-8")
-    applied, skipped = 0, []
+    print(f"skin: {SKIN.name} written")
 
-    for old, new in REPLACEMENTS:
+    for label, old, new in THEME_PATCHES:
+        patch(THEME, label, old, new)
+
+    for path, label, old, new in OTHER_PATCHES:
+        patch(path, label, old, new)
+
+    source = SETTINGS.read_text(encoding="utf-8")
+    applied = 0
+    for old, new in SETTINGS_LABELS:
         if old in source:
             source = source.replace(old, new)
             applied += 1
-        elif new in source:
-            skipped.append(new)
-        else:
-            print(f"skin: pattern not found: {old}", file=sys.stderr)
-            return 1
-
-    if ANCHOR_NEW in source:
-        background = True
-    elif ANCHOR in source:
-        source = source.replace(ANCHOR, ANCHOR_NEW, 1)
-        background = True
-    else:
-        print("skin: settings list anchor not found", file=sys.stderr)
-        return 1
-
+        elif new not in source:
+            raise SystemExit(f"skin: settings label not found: {old}")
+    anchor = '        .navigationTitle("设置")'
+    anchor_new = '        .skinListBackground()\n        .navigationTitle("设置")'
+    if anchor_new not in source:
+        if anchor not in source:
+            raise SystemExit("skin: settings list anchor not found")
+        source = source.replace(anchor, anchor_new, 1)
     SETTINGS.write_text(source, encoding="utf-8")
-    print(f"skin: {SKIN.name} written; labels {applied} applied, {len(skipped)} already; background {background}")
+    print(f"skin: {SETTINGS.name}: {applied} iclabel(s) patched, list background ok")
     return 0
 
 
