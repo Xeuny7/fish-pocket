@@ -57,7 +57,7 @@ private struct RemoteSignInPage: View {
                 step(2, "在它的「设置 → 连接手机」里点「开始连接」", "电脑上会显示一个登录二维码。")
                 step(3, "回到这里扫码", "在电脑上确认后就连上了。")
             } header: {
-                Text("怎么连接")
+                Text("怎么连接").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
 
@@ -69,7 +69,7 @@ private struct RemoteSignInPage: View {
                     Label("用邮箱和密码登录", systemImage: "envelope").foregroundStyle(Palette.ink)
                 }
             } footer: {
-                Text("远程控制通过开源项目 Agents Anywhere 实现。会话内容经它的服务器转发：官方云服务，或你自己部署的服务器。本机的会话不受影响，也不会上传。")
+                Text("远程控制通过开源项目 Agents Anywhere 实现。会话内容经它的服务器转发：官方云服务，或你自己部署的服务器。本机的会话不受影响，也不会上传。").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
 
@@ -78,7 +78,7 @@ private struct RemoteSignInPage: View {
                 link("开源仓库", "chevron.left.forwardslash.chevron.right", RemoteStore.Links.repository)
                 link("Agents Anywhere 的 iOS App", "arrow.up.forward.app", RemoteStore.Links.app)
             } footer: {
-                Text("添加智能体、模型配置、终端等更完整的功能在 Agents Anywhere 自己的 App 里。")
+                Text("添加智能体、模型配置、终端等更完整的功能在 Agents Anywhere 自己的 App 里。").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
         }
@@ -169,7 +169,7 @@ private struct RemoteScanSheet: View {
             }
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Palette.background)
+            .featurePage()
             .navigationTitle("扫码登录")
             .navigationBarTitleDisplayMode(.inline)
             .closeButton(dismiss)

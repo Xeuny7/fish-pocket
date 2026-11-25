@@ -27,43 +27,52 @@ struct ExploreTabView: View {
                 Section {
                     NavigationLink(value: Route.account) { ExploreAccountRow(account: app.account) }
                 }
+                .groupedRow()
                 Section {
                     quickLink(.models, "模型", "cpu")
-                    quickLink(.schedules, "自动化", "clock.arrow.2.circlepath",
-                              status: app.scheduleCount.map { String(localized: "\($0) 个") })
                     // A button, not a link: the look goes on first and 设置 is pushed after it
                     // (`openSettings`), so the chevron is drawn here as a link's would be.
                     Button(action: openSettings) {
                         label(Text("设置"), .settings, Text("访问权限、语音和外观")) {
-                            Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                            Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Palette.faint)
                         }
                     }
                     .foregroundStyle(Palette.ink)
                 } header: {
-                    Text("常用设置")
+                    Text("常用设置").foregroundStyle(Palette.secondary)
                 }
+                .groupedRow()
                 Section {
                     row(.miniApps, Text(MiniAppsPage.tabTitle), .miniApps, "与 AI 共创",
                         status: miniApps.apps.isEmpty ? nil : String(localized: "\(miniApps.apps.count) 个 Mini App"))
                 } header: {
-                    Text("创作")
+                    Text("创作").foregroundStyle(Palette.secondary)
                 }
+                .groupedRow()
                 Section {
                     row(.plugins, Text("插件市场"), .plugins, "查找和安装插件")
                     quickLink(.installedPlugins, "已安装插件", "puzzlepiece.extension")
                     row(.connectors, Text("连接器"), .connectors, "GitHub、Notion 等服务和本机能力", status: connectorStatus)
+                } header: {
+                    Text("扩展智能体").foregroundStyle(Palette.secondary)
+                }
+                .groupedRow()
+                Section {
+                    quickLink(.schedules, "自动化", "clock.arrow.2.circlepath",
+                              status: app.scheduleCount.map { String(localized: "\($0) 个") })
                     row(.phoneControl, Text("操控手机"), .phoneControl, "让智能体点按其他 App", status: phoneControl.state == .running ? String(localized: "运行中") : nil,
                         live: phoneControl.state == .running)
                     row(.remote, Text("远程控制"), .remote, "在手机上管电脑里的智能体", status: remoteStatus,
                         warns: app.remote.expired)
-                } header: {
-                    Text("扩展智能体")
-                }
-                Section {
                     if WCSession.isSupported() {
                         row(.watch, Text("Apple Watch"), .watch, "在手腕上看会话、做确认",
                             status: watch == .installed ? String(localized: "已安装") : nil)
                     }
+                } header: {
+                    Text("设备").foregroundStyle(Palette.secondary)
+                }
+                .groupedRow()
+                Section {
                     row(.shortcuts, Text("快捷指令"), .shortcuts, "用 Siri 和自动化打开 Bot、Mini App")
                     // Opens over everything: the mark of the links that leave the page.
                     Button { Haptics.tap(); app.webRequest = UUID() } label: {
@@ -72,8 +81,9 @@ struct ExploreTabView: View {
                     .foregroundStyle(Palette.ink)
                     row(.share, Text("分享 Fish Pocket"), .share, "海报、二维码或链接")
                 } header: {
-                    Text("其他")
+                    Text("其他").foregroundStyle(Palette.secondary)
                 }
+                .groupedRow()
                 Section {
                     ForEach(SupportLink.all) { link in
                         Link(destination: link.url) {
@@ -83,10 +93,11 @@ struct ExploreTabView: View {
                         .settlesRating(link.rates)
                     }
                 } header: {
-                    Text("反馈与社区")
+                    Text("反馈与社区").foregroundStyle(Palette.secondary)
                 } footer: {
-                    SupportLink.footer
+                    SupportLink.footer.foregroundStyle(Palette.secondary)
                 }
+                .groupedRow()
             }
             .groupedList()
             .tabEdgesSoftened()
@@ -122,6 +133,7 @@ struct ExploreTabView: View {
                 if path.isEmpty { Task { await app.account.refreshDetails() } }
             }
         }
+        .featurePage()
         .environment(\.systemLists, settingsLook)
         .onChange(of: path.isEmpty) { _, root in if root { settingsLook = false } }
         .inkTint()
@@ -153,7 +165,7 @@ struct ExploreTabView: View {
             label(title, icon, Text(detail)) {
                 if let status {
                     HStack(spacing: 5) {
-                        if live { Circle().fill(.green).frame(width: 7, height: 7) }
+                        if live { Circle().fill(Palette.running).frame(width: 7, height: 7) }
                         Text(status)
                     }
                     .font(.footnote)
@@ -167,7 +179,7 @@ struct ExploreTabView: View {
     private func quickLink(_ route: Route, _ title: LocalizedStringKey, _ icon: String, status: String? = nil) -> some View {
         NavigationLink(value: route) {
             LabeledContent {
-                if let status { Text(status) }
+                if let status { Text(status).foregroundStyle(Palette.secondary) }
             } label: {
                 Label(title, systemImage: icon)
             }
@@ -177,7 +189,7 @@ struct ExploreTabView: View {
 
     /// The mark of the rows that leave the page: the web version and the links at the foot.
     private var leavesArrow: some View {
-        Image(systemName: "arrow.up.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+        Image(systemName: "arrow.up.right").font(.footnote.weight(.semibold)).foregroundStyle(Palette.faint)
     }
 
     /// The entry's drawn icon, the name and a line on what it is for, and what it says on the right.

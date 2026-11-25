@@ -20,7 +20,7 @@ struct PhoneControlView: View {
                         Circle().fill(service.state.tint).frame(width: 8, height: 8)
                         Text(service.state.title)
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(service.state.tint)
                 } label: {
                     Label("iCTRL 服务", systemImage: "hand.tap")
                 }
@@ -35,11 +35,11 @@ struct PhoneControlView: View {
             } footer: {
                 switch service.state {
                 case .running:
-                    Text("智能体现在可以替你点按、输入、读取其他 App 的屏幕。它操作时屏幕会被占用，顶部会显示 iOS 的「Automation Running」提示；同时按住两个音量键也能停止。点「停止服务」后 iCTRL 会发一条通知，长按它并点「停止」才会真的停下。")
+                    Text("智能体现在可以替你点按、输入、读取其他 App 的屏幕。它操作时屏幕会被占用，顶部会显示 iOS 的「Automation Running」提示；同时按住两个音量键也能停止。点「停止服务」后 iCTRL 会发一条通知，长按它并点「停止」才会真的停下。").foregroundStyle(Palette.secondary)
                 case .stopped:
-                    Text("启动后智能体才能操作其他 App。如果点了没反应、或 iCTRL 打不开，多半是签名过期了：免费 Apple ID 签的 App 每 7 天要在 SideStore 里刷新一次。")
+                    Text("启动后智能体才能操作其他 App。如果点了没反应、或 iCTRL 打不开，多半是签名过期了：免费 Apple ID 签的 App 每 7 天要在 SideStore 里刷新一次。").foregroundStyle(Palette.secondary)
                 case .notInstalled:
-                    Text("这个功能要先在手机上装好 iCTRL（第三方开源 App，需要开发者模式），本 App 不会替你安装。")
+                    Text("这个功能要先在手机上装好 iCTRL（第三方开源 App，需要开发者模式），本 App 不会替你安装。").foregroundStyle(Palette.secondary)
                 case .checking:
                     EmptyView()
                 }
@@ -51,22 +51,22 @@ struct PhoneControlView: View {
                     Label("录下操作过程", systemImage: "record.circle")
                 }
             } footer: {
-                Text("智能体操作其他 App 时，把屏幕录下来，放在对话里那一轮的下面，可以倍速回看，也可以分享。录像只存在这台手机上，没有声音。")
+                Text("智能体操作其他 App 时，把屏幕录下来，放在对话里那一轮的下面，可以倍速回看，也可以分享。录像只存在这台手机上，没有声音。").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
 
             Section {
                 Link(destination: AppLinks.phoneControlGuide) {
                     LabeledContent {
-                        Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(.tertiary)
+                        Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(Palette.faint)
                     } label: {
                         Label("设置教程", systemImage: "book")
                     }
                 }
             } header: {
-                Text("怎么装")
+                Text("怎么装").foregroundStyle(Palette.secondary)
             } footer: {
-                Text("需要 iOS 17.4 或更高版本，第一次设置要用一次电脑。教程里有常见问题。")
+                Text("需要 iOS 17.4 或更高版本，第一次设置要用一次电脑。教程里有常见问题。").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
 
@@ -75,29 +75,29 @@ struct PhoneControlView: View {
                     Label("先用本机能力", systemImage: "iphone")
                         .font(.subheadline.weight(.semibold))
                     Text("日历、提醒、通讯录、照片这类事，智能体会直接用本机能力去做，又快又准。只有必须点开别的 App 才能完成时，它才会用 iCTRL。")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(Palette.secondary)
                 }
                 .padding(.vertical, 4)
                 VStack(alignment: .leading, spacing: 8) {
                     Label("截图会发给模型服务商", systemImage: "eye")
                         .font(.subheadline.weight(.semibold))
                     Text("智能体看到的其他 App 画面，会随对话发给你选的模型服务商。付款、删除、替你发消息前，它会先问你；密码和验证码由你自己输入。")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(Palette.secondary)
                 }
                 .padding(.vertical, 4)
                 VStack(alignment: .leading, spacing: 8) {
                     Label("保持「仅本机」", systemImage: "lock")
                         .font(.subheadline.weight(.semibold))
                     Text("iCTRL 自带远程访问和近场发现，打开后同一网络里的设备也能请求控制这台手机。用本 App 时不需要它们，建议一直关着。")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(.footnote).foregroundStyle(Palette.secondary)
                 }
                 .padding(.vertical, 4)
             } header: {
-                Text("使用须知")
+                Text("使用须知").foregroundStyle(Palette.secondary)
             }
             .groupedRow()
         }
-        .listStyle(.insetGrouped)
+        .groupedList()
         .navigationTitle("操控手机")
         .navigationBarTitleDisplayMode(.inline)
         .task { await service.refresh() }
@@ -124,9 +124,9 @@ final class PhoneControlService {
 
         var tint: Color {
             switch self {
-            case .running: .green
-            case .stopped: .orange
-            case .notInstalled, .checking: .gray
+            case .running: Palette.running
+            case .stopped: Palette.waiting
+            case .notInstalled, .checking: Palette.secondary
             }
         }
     }

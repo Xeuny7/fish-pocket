@@ -36,7 +36,7 @@ private struct SettingsSheet: View {
 
     var body: some View {
         NavigationStack { SettingsList(pushed: false).closeButton(dismiss) }
-            // 设置 and every page pushed or presented from it: the system's lists, not the monochrome ones.
+            // Settings context is inherited by destinations in this sheet.
             .settingsStyle()
     }
 }
@@ -72,7 +72,7 @@ private struct SettingsList: View {
         List {
             if !engineRunning {
                 Section { EngineCard() }
-                .settingsCardRow()
+                .groupedRow()
             }
 
             // Pushed from the 探索 tab, these two are on that page.
@@ -84,7 +84,7 @@ private struct SettingsList: View {
                         NavigationLink { WatchSetupPage() } label: { WatchSetupRow() }
                     }
                 }
-                .settingsCardRow()
+                .groupedRow()
             }
 
             // The ways to reach a model, each on its own: Fish Pocket credits (when this build
@@ -108,7 +108,7 @@ private struct SettingsList: View {
             } footer: {
                 if !pushed { Text("几种方式相互独立，配置任意一种就能开始对话。") }
             }
-            .settingsCardRow()
+            .groupedRow()
 
             if !pushed || mirror.serves("permission") {
                 Section {
@@ -119,7 +119,7 @@ private struct SettingsList: View {
                 } header: {
                     Text(pushed ? LocalizedStringKey("权限") : LocalizedStringKey("模型与权限"))
                 }
-                .settingsCardRow()
+                .groupedRow()
             }
 
             Section {
@@ -145,18 +145,24 @@ private struct SettingsList: View {
             } header: {
                 Text("声音与图像")
             }
-            .settingsCardRow()
+            .groupedRow()
 
             if !pushed {
                 Section {
                     NavigationLink { PluginsView() } label: {
                         row("插件", "puzzlepiece.extension", pluginCount.map { String(localized: "\($0) 个") } ?? "")
                     }
+                }
+                .groupedRow()
+
+                Section {
                     NavigationLink { SchedulesView(openSession: openSession.map { open in { open($0) } }) } label: {
                         row("自动化", "clock.arrow.2.circlepath", app.scheduleCount.map { String(localized: "\($0) 个") } ?? "")
                     }
+                } header: {
+                    Text("设备").foregroundStyle(Palette.secondary)
                 }
-                .settingsCardRow()
+                .groupedRow()
             }
 
             Section {
@@ -175,7 +181,7 @@ private struct SettingsList: View {
             } footer: {
                 Text(backgroundFooter)
             }
-            .settingsCardRow()
+            .groupedRow()
             .onChange(of: keepAlive) { BackgroundKeeper.shared.settingsChanged() }
             .onChange(of: continuedProcessing) { BackgroundKeeper.shared.settingsChanged() }
             .alert("关闭静音音频？", isPresented: $confirmingKeepAliveOff) {
@@ -192,7 +198,7 @@ private struct SettingsList: View {
             } footer: {
                 Text("关掉后，主屏幕和锁屏小组件只显示数量和状态。设备锁定时，标题总会被打码。")
             }
-            .settingsCardRow()
+            .groupedRow()
             .onChange(of: widgetTitles) { WidgetSnapshotWriter.shared.refresh() }
 
             Section {
@@ -227,7 +233,7 @@ private struct SettingsList: View {
             } header: {
                 Text("显示与语言")
             }
-            .settingsCardRow()
+            .groupedRow()
 
             Section {
                 NavigationLink { AdvancedSettingsPage() } label: { row("高级", "wrench.and.screwdriver") }
@@ -235,7 +241,7 @@ private struct SettingsList: View {
             } header: {
                 Text("维护")
             }
-            .settingsCardRow()
+            .groupedRow()
 
             // Out of the sessions list: a tap there is to open a conversation, and an archived one does not open.
             Section {
@@ -244,12 +250,13 @@ private struct SettingsList: View {
                     row("已归档会话", "archivebox", count > 0 ? "\(count)" : "")
                 }
             }
-            .settingsCardRow()
+            .groupedRow()
 
             // On the 探索 tab when there is one; an iPad before iOS 18 has 设置 as a sheet and no such tab.
             if !pushed { SupportLinksSection() }
 
         }
+        .groupedList()
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(pushed ? .inline : .large)
         .alert("重启 App 后生效", isPresented: $languageChanged) {
@@ -384,7 +391,7 @@ private struct AdvancedSettingsPage: View {
                 NavigationLink("Agent 预设") { AgentPresetsPage() }
                 NavigationLink("全部设置") { AllSettingsPage() }
             }
-            .settingsCardRow()
+            .groupedRow()
 
             Section {
                 if app.settings.hasDocument {
@@ -395,9 +402,10 @@ private struct AdvancedSettingsPage: View {
             } footer: {
                 Text("网页版用于只有网页界面的插件，设置与这里共用同一份配置。")
             }
-            .settingsCardRow()
+            .groupedRow()
         }
         .sheet(isPresented: $showCordis) { CordisPanelView(currentSession: nil) }
+        .groupedList()
         .navigationTitle("高级")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $showWeb) { WebFallbackView() }
@@ -441,7 +449,7 @@ private struct AboutPage: View {
     var body: some View {
         List {
             Section { EngineCard() }
-            .settingsCardRow()
+            .groupedRow()
             Section {
                 LabeledContent("引擎", value: "DeepSeek Harness")
                 if let engineVersion { LabeledContent("引擎版本", value: engineVersion) }
@@ -462,13 +470,14 @@ private struct AboutPage: View {
                     Text("Bot 功能的后台是开源项目 DS Bot（Apache-2.0），感谢 Fei2411 和社区贡献者。")
                 }
             }
-            .settingsCardRow()
+            .groupedRow()
             Section {
                 LabeledContent("连接状态", value: app.connected ? String(localized: "已连接") : String(localized: "重新连接中"))
                 LabeledContent("存储", value: storage.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "…")
             }
-            .settingsCardRow()
+            .groupedRow()
         }
+        .groupedList()
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
         .task { storage = await Self.storageSize() }
@@ -513,16 +522,18 @@ private struct AllSettingsPage: View {
                                     NavigationLink(title) { NamespaceFormView(title: title, ns: name) }
                                 }
                             }
-                            .settingsCardRow()
+                            .groupedRow()
                         }
+                        .groupedList()
                         .navigationTitle(group.title)
                     }
                 }
             } footer: {
                 Text("这些设置和网页版、桌面版共用同一份配置。")
             }
-            .settingsCardRow()
+            .groupedRow()
         }
+        .groupedList()
         .navigationTitle("全部设置")
         .navigationBarTitleDisplayMode(.inline)
         // The plugin titles the rows of unnamed namespaces fall back to.
@@ -680,7 +691,7 @@ private struct EngineLogView: View {
                 .padding(16)
         }
         .defaultScrollAnchor(.bottom)
-        .background(Palette.grouped)
+        .featurePage()
         .navigationTitle("引擎日志")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -788,6 +799,6 @@ struct SupportLinksSection: View {
         } footer: {
             SupportLink.footer
         }
-        .settingsCardRow()
+        .groupedRow()
     }
 }

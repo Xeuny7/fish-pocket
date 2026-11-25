@@ -90567,6 +90567,15 @@
         }
       }
     },
+    "设备" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Devices" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Dispositivos" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "デバイス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "기기" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "裝置" } }
+      }
+    },
     "设备状态" : {
       "localizations" : {
         "en" : {

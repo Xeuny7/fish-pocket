@@ -39,7 +39,7 @@ struct ShareAppPage: View {
                 .padding(.top, 12)
                 .padding(.bottom, 16)
         }
-        .background(Palette.grouped)
+        .featurePage()
         .navigationTitle("分享 Fish Pocket")
         .navigationBarTitleDisplayMode(.inline)
         // Whoever came this far needs no card asking them to.
@@ -104,7 +104,7 @@ struct ShareAppPage: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Palette.background, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .featurePanel(cornerRadius: 18)
                     .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.stroke) }
             }
             .frame(maxWidth: 420)

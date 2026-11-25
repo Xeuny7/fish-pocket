@@ -1,18 +1,3 @@
-extension View {
-    /// 设置页/表格页统一的「卡片行」外观：白卡 + 大圆角 + 行间留白（dsh-go 风格）
-    func settingsCardRow() -> some View {
-        self
-            .listRowBackground(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Palette.grouped)
-                    .shadow(color: Color.black.opacity(0.05), radius: 10, y: 4)
-                    .padding(.vertical, 3)
-            )
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-    }
-}
-
 import SwiftUI
 
 /// Design tokens (docs/design/README.md §3). Each is a Color Set in
@@ -48,6 +33,65 @@ enum Palette {
     static let removedBackground = Color("DiffDeleteBackground")
     static let removed = Color("DiffDeleteText")
     static let scrim = Color("Scrim")
+}
+
+private enum SkinTone {
+    static let top = Color(red: 0xDF / 255, green: 0xE5 / 255, blue: 0xFD / 255)
+    static let middle = Color(red: 0xE7 / 255, green: 0xEB / 255, blue: 0xFE / 255)
+    static let bottom = Color(red: 0xF0 / 255, green: 0xF0 / 255, blue: 0xFA / 255)
+}
+
+struct AppBackground: View {
+    var body: some View {
+        ZStack {
+            SkinTone.middle
+            LinearGradient(
+                stops: [
+                    .init(color: SkinTone.top, location: 0.00),
+                    .init(color: SkinTone.middle, location: 0.45),
+                    .init(color: SkinTone.bottom, location: 1.00),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func skinNavigationBackground() -> some View {
+        if #available(iOS 18.0, *) {
+            containerBackground(for: .navigation) { AppBackground() }
+        } else {
+            background { AppBackground().ignoresSafeArea(.container) }
+        }
+    }
+
+    /// One canvas through the scroll view, status bar and space behind the native tab bar.
+    func featurePage() -> some View {
+        frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { AppBackground().ignoresSafeArea(.container) }
+            .skinNavigationBackground()
+            .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    func featurePanel(cornerRadius: CGFloat = 18) -> some View {
+        background { FeaturePanel(cornerRadius: cornerRadius) }
+    }
+}
+
+/// A stable fill keeps the outline and text legible when there is little content behind the panel.
+private struct FeaturePanel: View {
+    var cornerRadius: CGFloat = 18
+    var fill = Palette.grouped
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        shape.fill(fill)
+            .overlay { shape.strokeBorder(Palette.stroke, lineWidth: 1) }
+            .allowsHitTesting(false)
+    }
 }
 
 /// The appearance choice lives in the engine (`ui-theme.preference`, shared with the web and
@@ -103,18 +147,30 @@ struct CapsuleButtonStyle: ButtonStyle {
     var kind: Kind = .primary
     var height: CGFloat = 52
     var fill = true
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(kind: Kind, height: CGFloat, fill: Bool) {
+        self.kind = kind
+        self.height = height
+        self.fill = fill
+    }
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(height >= 44 ? .callout.weight(.semibold) : .subheadline.weight(.semibold))
-            .foregroundStyle(kind == .primary ? Palette.onInk : Palette.ink)
+            .foregroundStyle(isEnabled ? (kind == .primary ? Palette.onInk : Palette.ink) : Palette.secondary)
             .padding(.horizontal, 16)
             .frame(maxWidth: fill ? .infinity : nil, minHeight: height)
             .background {
-                switch kind {
-                case .primary: Capsule().fill(Palette.ink)
-                case .secondary: Capsule().fill(Palette.control)
-                case .outline: Capsule().strokeBorder(Palette.stroke)
+                if isEnabled {
+                    switch kind {
+                    case .primary: Capsule().fill(Palette.ink)
+                    case .secondary: Capsule().fill(Palette.control)
+                    case .outline: Capsule().strokeBorder(Palette.stroke)
+                    }
+                } else {
+                    Capsule().fill(Palette.control)
+                        .overlay { Capsule().strokeBorder(Palette.stroke) }
                 }
             }
             .contentShape(Capsule())
@@ -129,9 +185,7 @@ extension ButtonStyle where Self == CapsuleButtonStyle {
 }
 
 extension EnvironmentValues {
-    /// 设置 and the pages under it wear the system's own list look: its background and separators.
-    /// Set on the settings stack and on the sheets that open one of its pages directly; every other
-    /// screen keeps the monochrome look.
+    /// Settings context for views that still differentiate their system presentation.
     @Entry var systemLists = false
 }
 
@@ -188,60 +242,40 @@ struct StatusDot: View {
     }
 }
 
-/// Grouped rows on the page background (plugins, workbench lists); under 设置, the system's grouped list.
+/// Keep the list native while drawing its own background through the safe areas.
 struct GroupedListStyle: ViewModifier {
-    @Environment(\.systemLists) private var system
-
     func body(content: Content) -> some View {
-        if system {
-            content.listStyle(.insetGrouped)
-        } else {
-            content
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .background(Palette.background)
-        }
+        content
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .featurePage()
     }
 }
 
-/// What shows around a list's rows: the system's grouped background under 设置, the page colour elsewhere.
-private struct PageBackground: ViewModifier {
-    @Environment(\.systemLists) private var system
-
-    func body(content: Content) -> some View {
-        content.background(system ? Color(.systemGroupedBackground) : Palette.background)
-    }
-}
-
-/// The fill of rows in a `groupedList()`; the system's own rows and separators under 设置.
 private struct GroupedRowStyle: ViewModifier {
-    @Environment(\.systemLists) private var system
+    var highlighted: Bool
 
     func body(content: Content) -> some View {
-        if system {
-            content
-        } else {
-            content.listRowBackground(Palette.grouped).listRowSeparator(.hidden)
-        }
+        content
+            .listRowBackground(FeaturePanel(fill: highlighted ? Palette.control : Palette.grouped).padding(.vertical, 3))
+            .listRowSeparator(.hidden)
     }
 }
 
 extension View {
     func groupedList() -> some View { modifier(GroupedListStyle()) }
 
-    /// A settings page and everything pushed or presented from it, as 设置 is drawn: the system's
-    /// grouped lists and separators, with the app's ink for what can be tapped. Goes on the
-    /// navigation stack (or the sheet's content), so the pages inside inherit it.
+    /// Apply settings context and the app’s ink tint to a stack or sheet.
     func settingsStyle() -> some View {
         environment(\.systemLists, true).inkTint()
     }
 
     /// A picker's value in the grey of the other rows' values; the page's ink tint would paint it black.
     /// Only the value: the row's icon keeps the ink.
-    func pickerValueTint() -> some View { tint(.secondary) }
+    func pickerValueTint() -> some View { tint(Palette.secondary) }
 
     /// The background of a page that puts something of its own (tabs, an empty state) around a `groupedList()`.
-    func pageBackground() -> some View { modifier(PageBackground()) }
+    func pageBackground() -> some View { featurePage() }
 
     /// A tab's own list, between the title bar and the tab bar: from iOS 26 both bars are
     /// see-through and what scrolls under them softens, as on the system's pages. Left to the
@@ -354,7 +388,9 @@ extension View {
 
     /// Row fill (and no separators: rows group by space) for lists styled with
     /// `groupedList()`; applies to every row of a `Section`.
-    func groupedRow() -> some View { modifier(GroupedRowStyle()) }
+    func groupedRow(highlighted: Bool = false) -> some View {
+        modifier(GroupedRowStyle(highlighted: highlighted))
+    }
 
     /// A close button for a view presented as a sheet (it may also be pushed, where it has none).
     func closeButton(_ dismiss: DismissAction) -> some View {

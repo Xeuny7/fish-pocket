@@ -611,8 +611,7 @@ private struct NotificationCard: View {
         }
         .padding(14)
         .frame(maxWidth: 420)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.stroke))
+        .featurePanel(cornerRadius: 16)
         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
     }
 }

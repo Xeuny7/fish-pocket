@@ -371,10 +371,10 @@ struct BotConnectorPage: View {
             ConnectorIcon(id: id, name: row["name"].string ?? id, size: 76)
             Text(ConnectorBrand.name(row)).font(.title3.weight(.semibold)).padding(.top, 4)
             let about = ConnectorBrand.about(row)
-            if !about.isEmpty { Text(about).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+            if !about.isEmpty { Text(about).font(.subheadline).foregroundStyle(Palette.secondary).multilineTextAlignment(.center) }
             ConnectorState(row: row)
                 .padding(.horizontal, 10).frame(height: 26)
-                .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+                .background(Palette.control, in: Capsule())
             if let error = row["error"].string, state == "error" {
                 Text(BotErrorText.text(error)).font(.footnote).foregroundStyle(Palette.removed).multilineTextAlignment(.center)
             }
@@ -498,12 +498,16 @@ private struct CustomConnectorSheet: View {
             Form {
                 Section {
                     TextField("名字", text: $name)
-                    TextField("https://…", text: $url).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("https://…", text: $url, prompt: Text("https://…").foregroundStyle(Palette.faint)).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                 }
+                .groupedRow()
                 Section {
-                    TextField("Authorization: Bearer …", text: $headers, axis: .vertical).lineLimit(2...).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("Authorization: Bearer …", text: $headers, prompt: Text("Authorization: Bearer …").foregroundStyle(Palette.faint), axis: .vertical).lineLimit(2...).textInputAutocapitalization(.never).autocorrectionDisabled()
                 } header: { Text("请求头（可不填）") } footer: { Text("一行一个，写成「名字: 值」。值可以写 $DSH_SECRET_名字，引用保存的密钥。") }
+                .groupedRow()
             }
+            .scrollContentBackground(.hidden)
+            .featurePage()
             .navigationTitle("自定义连接器")
             .navigationBarTitleDisplayMode(.inline)
             .saveToolbar(canSave: !name.trimmingCharacters(in: .whitespaces).isEmpty && url.hasPrefix("http"), saving: saving, cancel: { dismiss() }) {

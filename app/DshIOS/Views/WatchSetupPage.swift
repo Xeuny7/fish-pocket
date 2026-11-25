@@ -48,7 +48,7 @@ struct WatchSetupPage: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
-        .background(Palette.grouped)
+        .featurePage()
         .navigationTitle("Apple Watch")
         .navigationBarTitleDisplayMode(.inline)
         // Installing happens in another app: look again every couple of seconds while this page is open.
@@ -195,7 +195,7 @@ struct WatchSetupPage: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.stroke) }
         .id(channel)
         .transition(.opacity)
@@ -258,7 +258,7 @@ struct WatchSetupPage: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.stroke) }
     }
 
@@ -324,7 +324,7 @@ private struct StatusCard: View {
             if pairing == .checking { ProgressView() }
         }
         .padding(16)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .featurePanel(cornerRadius: 20)
         .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.stroke) }
         .accessibilityElement(children: .combine)
         .animation(.snappy, value: pairing)

@@ -58,7 +58,7 @@ struct MiniAppsPage: View {
         .simultaneousGesture(TapGesture().onEnded {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { dismissKeyboard() }
         })
-        .background(Palette.background)
+        .featurePage()
         .tabEdgesSoftened()
         // The ideas are for a first one; once there is one of their own, the bar alone.
         .conversationDock { MiniAppRequestBar(first: mine.isEmpty) }
@@ -363,7 +363,7 @@ struct MiniAppCard: View {
                 }
             }
             .padding(12)
-            .background(Palette.field, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .featurePanel(cornerRadius: 18)
         }
         .buttonStyle(.plain)
         .disabled(looked && app == nil)

@@ -23,7 +23,7 @@ import UserNotifications
 struct NativeCapabilitiesView: View {
     var body: some View {
         List { NativeCapabilitySections() }
-            .listStyle(.insetGrouped)
+            .groupedList()
             .navigationTitle("本机能力")
             .navigationBarTitleDisplayMode(.inline)
     }

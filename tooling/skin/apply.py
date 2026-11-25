@@ -56,16 +56,6 @@ struct IconLabel: View {
     }
 }
 
-/// Frosted background for ordinary grouped list rows.
-struct GlassFill: View {
-    var body: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-    }
-}
-
 /// Rounded glass for the Bot and group rows, using the native material on iOS 26.
 struct BotRowGlass: View {
     let isSelected: Bool
@@ -87,56 +77,6 @@ struct BotRowGlass: View {
         }
     }
 }
-
-enum SkinTone {
-    static let top = Color(red: 0xDF / 255, green: 0xE5 / 255, blue: 0xFD / 255)
-    static let middle = Color(red: 0xE7 / 255, green: 0xEB / 255, blue: 0xFE / 255)
-    static let bottom = Color(red: 0xF0 / 255, green: 0xF0 / 255, blue: 0xFA / 255)
-}
-
-struct AppBackground: View {
-    var body: some View {
-        ZStack {
-            SkinTone.middle
-            LinearGradient(
-                stops: [
-                    .init(color: SkinTone.top, location: 0.00),
-                    .init(color: SkinTone.middle, location: 0.45),
-                    .init(color: SkinTone.bottom, location: 1.00),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func skinNavigationBackground() -> some View {
-        if #available(iOS 18.0, *) {
-            containerBackground(for: .navigation) { AppBackground() }
-        } else {
-            background { AppBackground().ignoresSafeArea(.container) }
-        }
-    }
-
-    func skinListBackground() -> some View {
-        scrollContentBackground(.hidden)
-            .background(AppBackground().ignoresSafeArea())
-    }
-
-    func saasRowPlate(cornerRadius: CGFloat = 16) -> some View {
-        background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Palette.stroke, lineWidth: 1)
-        )
-    }
-}
 """
 
 SETTINGS_LABELS = [
@@ -147,49 +87,6 @@ SETTINGS_LABELS = [
     ('Label("语言", systemImage: "globe")', 'IconLabel("语言", "globe")'),
     ('Label(title, systemImage: icon)', 'IconLabel(title, icon)'),
     ('Label("默认访问模式", systemImage: "lock.shield")', 'IconLabel("默认访问模式", "lock.shield")'),
-]
-
-THEME_PATCHES = [
-    (
-        "page background",
-        "        content.background(system ? Color(.systemGroupedBackground) : Palette.background)",
-        "        content.background(AppBackground())",
-    ),
-    (
-        "grouped list",
-        "        if system {\n"
-        "            content.listStyle(.insetGrouped)\n"
-        "        } else {\n"
-        "            content\n"
-        "                .listStyle(.insetGrouped)\n"
-        "                .scrollContentBackground(.hidden)\n"
-        "                .background(Palette.background)\n"
-        "        }",
-        "        if system {\n"
-        "            content\n"
-        "                .listStyle(.insetGrouped)\n"
-        "                .scrollContentBackground(.hidden)\n"
-        "                .background(AppBackground())\n"
-        "        } else {\n"
-        "            content\n"
-        "                .listStyle(.insetGrouped)\n"
-        "                .scrollContentBackground(.hidden)\n"
-        "                .background(AppBackground())\n"
-        "        }",
-    ),
-    (
-        "grouped row glass",
-        "        if system {\n"
-        "            content\n"
-        "        } else {\n"
-        "            content.listRowBackground(Palette.grouped).listRowSeparator(.hidden)\n"
-        "        }",
-        "        if system {\n"
-        "            content.listRowBackground(GlassFill())\n"
-        "        } else {\n"
-        "            content.listRowBackground(GlassFill()).listRowSeparator(.hidden)\n"
-        "        }",
-    ),
 ]
 
 BOT_PATCHES = [
@@ -298,20 +195,20 @@ PLIST_NEW = "      path: DshIOS/Info.plist\n      properties:\n        UIUserInt
 
 COLORS = {
     "Background": "EAEDFE",
-    "Grouped": "FCFDFF",
+    "Grouped": "F8FAFF",
     "Field": "F4F7FE",
     "Control": "E9EDF9",
-    "Stroke": "E4E7F2",
+    "Stroke": "74809D",
     "Bubble": "E7ECFB",
     "Ink": "1D2437",
-    "TextSecondary": "6E7686",
-    "TextFaint": "9AA2B2",
+    "TextSecondary": "505B71",
+    "TextFaint": "566278",
     "OnInk": "FFFFFF",
     "Link": "6C8CF5",
     "Spot": "6C8CF5",
     "AccentColor": "6C8CF5",
-    "StatusRunning": "2FA36B",
-    "StatusWaiting": "C98A2E",
+    "StatusRunning": "187048",
+    "StatusWaiting": "814700",
     "Scrim": "000000",
     "DiffAddBackground": "EAF7EE",
     "DiffAddText": "1F7A44",
@@ -376,9 +273,6 @@ def main() -> int:
     SKIN.write_text(SKIN_SWIFT, encoding="utf-8")
     print(f"skin: {SKIN.name} written")
 
-    for label, old, new in THEME_PATCHES:
-        patch(THEME, label, old, new)
-
     for label, old, new in BOT_PATCHES:
         patch(BOT, label, old, new)
 
@@ -401,14 +295,8 @@ def main() -> int:
             applied += 1
         elif new not in source:
             raise SystemExit(f"skin: settings label not found: {old}")
-    anchor = '        .navigationTitle("设置")'
-    anchor_new = '        .skinListBackground()\n        .navigationTitle("设置")'
-    if anchor_new not in source:
-        if anchor not in source:
-            raise SystemExit("skin: settings list anchor not found")
-        source = source.replace(anchor, anchor_new, 1)
     SETTINGS.write_text(source, encoding="utf-8")
-    print(f"skin: {SETTINGS.name}: {applied} iclabel(s) patched, list background ok")
+    print(f"skin: {SETTINGS.name}: {applied} icon label(s) patched")
     return 0
 
 

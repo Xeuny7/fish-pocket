@@ -424,6 +424,7 @@ struct ScheduleDetailView: View {
             .groupedRow()
         }
         .scrollContentBackground(.hidden)
+        .featurePage()
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             // The number pad has no return key.

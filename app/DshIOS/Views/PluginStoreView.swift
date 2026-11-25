@@ -23,7 +23,7 @@ struct PluginStoreView: View {
                 StoreInstalledPage(showDiscover: { tab = "discover" })
             }
         }
-        .background(Palette.background)
+        .featurePage()
         .animation(.snappy(duration: 0.2), value: searching)
         .navigationTitle("插件")
         .navigationBarTitleDisplayMode(.inline)
@@ -335,7 +335,7 @@ private struct StoreDiscoverPage: View {
     private func rows(_ entries: [StoreEntry], lead: AnyView? = nil) -> some View {
         if wide {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(entries) { row($0).background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous)) }
+                ForEach(entries) { row($0).featurePanel(cornerRadius: 22) }
             }
             .padding(.horizontal, 16)
         } else {
@@ -344,7 +344,7 @@ private struct StoreDiscoverPage: View {
                 ForEach(entries) { row($0) }
             }
             .padding(.vertical, 3)
-            .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .featurePanel(cornerRadius: 22)
             .padding(.horizontal, 16)
         }
     }

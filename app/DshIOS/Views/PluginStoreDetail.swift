@@ -71,7 +71,7 @@ struct StoreEntryDetail: View {
             .padding(.bottom, 32)
             .readableWidth()
         }
-        .background(Palette.background)
+        .featurePage()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $reporting) { PluginReportSheet(entry: entry, market: model.market.url) }
@@ -219,7 +219,7 @@ struct StoreEntryDetail: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .featurePanel(cornerRadius: 20)
     }
 
     /// 举报: the way to tell Fish Pocket a plugin breaks the rules or does harm.
@@ -239,7 +239,7 @@ struct StoreEntryDetail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .padding(.horizontal, 16)
     }
 
@@ -259,7 +259,7 @@ struct StoreEntryDetail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .padding(.horizontal, 16)
     }
 
@@ -281,7 +281,7 @@ struct StoreEntryDetail: View {
             if let market = localized(model.market.result?["title"] ?? .null) { fact("插件市场", market) }
         }
         .padding(.vertical, 4)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .padding(.horizontal, 16)
     }
 
@@ -342,7 +342,7 @@ struct StoreEntryDetail: View {
             }
         }
         .padding(.vertical, 4)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .padding(.horizontal, 16)
     }
 }
@@ -389,7 +389,7 @@ private struct StoreReadmePage: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(Palette.background)
+        .featurePage()
         .navigationTitle(entry.shortName)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
@@ -503,7 +503,7 @@ struct StoreInstallConfirm: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Palette.background)
+        .presentationBackground(Palette.background)
         .presentationDetents([.height(height)])
         .inkTint()
     }
@@ -551,7 +551,7 @@ struct StoreWebUINote: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, compact ? 10 : 14)
-        .background(Palette.grouped, in: RoundedRectangle(cornerRadius: compact ? 16 : 20, style: .continuous))
+        .featurePanel(cornerRadius: compact ? 16 : 20)
         .fullScreenCover(isPresented: $showWeb) { WebFallbackView() }
     }
 }
@@ -578,7 +578,7 @@ struct PluginAskRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .featurePanel(cornerRadius: 18)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

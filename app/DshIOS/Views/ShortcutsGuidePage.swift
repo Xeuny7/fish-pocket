@@ -32,7 +32,7 @@ struct ShortcutsGuidePage: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
-        .background(Palette.grouped)
+        .featurePage()
         .navigationTitle("快捷指令")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -58,7 +58,7 @@ struct ShortcutsGuidePage: View {
         .padding(.vertical, 20)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .featurePanel(cornerRadius: 26)
         .overlay { RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Palette.stroke) }
     }
 
@@ -103,7 +103,7 @@ struct ShortcutsGuidePage: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.stroke) }
     }
 
@@ -190,7 +190,7 @@ struct ShortcutsGuidePage: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .featurePanel(cornerRadius: 22)
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Palette.stroke) }
     }
 

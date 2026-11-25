@@ -414,7 +414,6 @@ private struct MoreExtensionsView: View {
 /// P-04: artwork, name, tags, one-liner and the state; the switch is on the detail page it opens.
 private struct PluginCard: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.systemLists) private var systemLists
     let package: PluginPackage
     @State private var confirmingUninstall = false
 
@@ -446,8 +445,7 @@ private struct PluginCard: View {
             }
             .padding(.vertical, 3)
         }
-        // nil is the list's own row: the system's under 设置.
-        .listRowBackground(manager.highlight == package.name ? Palette.control : systemLists ? nil : Palette.grouped)
+        .groupedRow(highlighted: manager.highlight == package.name)
         .swipeActions {
             if package.removable && package.readOnlyReason == nil {
                 Button("卸载", role: .destructive) { confirmingUninstall = true }
