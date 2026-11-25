@@ -1,3 +1,18 @@
+extension View {
+    /// 设置页/表格页统一的「卡片行」外观：白卡 + 大圆角 + 行间留白（dsh-go 风格）
+    func settingsCardRow() -> some View {
+        self
+            .listRowBackground(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Palette.grouped)
+                    .shadow(color: Color.black.opacity(0.05), radius: 10, y: 4)
+                    .padding(.vertical, 3)
+            )
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+}
+
 import SwiftUI
 
 /// Design tokens (docs/design/README.md §3). Each is a Color Set in

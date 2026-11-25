@@ -77,6 +77,7 @@ private struct SettingsList: View {
         List {
             if !engineRunning {
                 Section { EngineCard() }
+                .settingsCardRow()
             }
 
             // Pushed from the 探索 tab, these two are on that page.
@@ -88,6 +89,7 @@ private struct SettingsList: View {
                         NavigationLink { WatchSetupPage() } label: { WatchSetupRow() }
                     }
                 }
+                .settingsCardRow()
             }
 
             // The ways to reach a model, each on its own: Fish Pocket credits (when this build
@@ -109,6 +111,7 @@ private struct SettingsList: View {
             } footer: {
                 Text("几种方式相互独立，配置任意一种就能开始对话。")
             }
+            .settingsCardRow()
 
             Section {
                 NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
@@ -133,6 +136,7 @@ private struct SettingsList: View {
                 }
                 if mirror.serves("permission") { permissionPicker }
             }
+            .settingsCardRow()
 
             Section {
                 NavigationLink { PluginsView() } label: {
@@ -142,6 +146,7 @@ private struct SettingsList: View {
                     row("自动化", "clock.arrow.2.circlepath", app.scheduleCount.map { String(localized: "\($0) 个") } ?? "")
                 }
             }
+            .settingsCardRow()
 
             Section {
                 // Turning it off asks first: without it the system may end the engine in the background.
@@ -159,6 +164,7 @@ private struct SettingsList: View {
             } footer: {
                 Text(backgroundFooter)
             }
+            .settingsCardRow()
             .onChange(of: keepAlive) { BackgroundKeeper.shared.settingsChanged() }
             .onChange(of: continuedProcessing) { BackgroundKeeper.shared.settingsChanged() }
             .alert("关闭静音音频？", isPresented: $confirmingKeepAliveOff) {
@@ -175,6 +181,7 @@ private struct SettingsList: View {
             } footer: {
                 Text("关掉后，主屏幕和锁屏小组件只显示数量和状态。设备锁定时，标题总会被打码。")
             }
+            .settingsCardRow()
             .onChange(of: widgetTitles) { WidgetSnapshotWriter.shared.refresh() }
 
             Section {
@@ -207,11 +214,13 @@ private struct SettingsList: View {
                     languageChanged = true
                 }
             }
+            .settingsCardRow()
 
             Section {
                 NavigationLink { AdvancedSettingsPage() } label: { row("高级", "wrench.and.screwdriver") }
                 NavigationLink { AboutPage(engineVersion: engineVersion) } label: { row("关于", "info.circle", aboutValue) }
             }
+            .settingsCardRow()
 
             // Out of the sessions list: a tap there is to open a conversation, and an archived one does not open.
             Section {
@@ -220,6 +229,7 @@ private struct SettingsList: View {
                     row("已归档会话", "archivebox", count > 0 ? "\(count)" : "")
                 }
             }
+            .settingsCardRow()
 
             // On the 探索 tab when there is one; an iPad before iOS 18 has 设置 as a sheet and no such tab.
             if !pushed { SupportLinksSection() }
@@ -357,6 +367,7 @@ private struct AdvancedSettingsPage: View {
                 NavigationLink("Agent 预设") { AgentPresetsPage() }
                 NavigationLink("全部设置") { AllSettingsPage() }
             }
+            .settingsCardRow()
 
             Section {
                 if app.settings.hasDocument {
@@ -367,6 +378,7 @@ private struct AdvancedSettingsPage: View {
             } footer: {
                 Text("网页版用于只有网页界面的插件，设置与这里共用同一份配置。")
             }
+            .settingsCardRow()
         }
         .sheet(isPresented: $showCordis) { CordisPanelView(currentSession: nil) }
         .navigationTitle("高级")
@@ -412,6 +424,7 @@ private struct AboutPage: View {
     var body: some View {
         List {
             Section { EngineCard() }
+            .settingsCardRow()
             Section {
                 LabeledContent("引擎", value: "DeepSeek Harness")
                 if let engineVersion { LabeledContent("引擎版本", value: engineVersion) }
@@ -432,10 +445,12 @@ private struct AboutPage: View {
                     Text("Bot 功能的后台是开源项目 DS Bot（Apache-2.0），感谢 Fei2411 和社区贡献者。")
                 }
             }
+            .settingsCardRow()
             Section {
                 LabeledContent("连接状态", value: app.connected ? String(localized: "已连接") : String(localized: "重新连接中"))
                 LabeledContent("存储", value: storage.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "…")
             }
+            .settingsCardRow()
         }
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
@@ -481,6 +496,7 @@ private struct AllSettingsPage: View {
                                     NavigationLink(title) { NamespaceFormView(title: title, ns: name) }
                                 }
                             }
+                            .settingsCardRow()
                         }
                         .navigationTitle(group.title)
                     }
@@ -488,6 +504,7 @@ private struct AllSettingsPage: View {
             } footer: {
                 Text("这些设置和网页版、桌面版共用同一份配置。")
             }
+            .settingsCardRow()
         }
         .navigationTitle("全部设置")
         .navigationBarTitleDisplayMode(.inline)
@@ -754,5 +771,6 @@ struct SupportLinksSection: View {
         } footer: {
             SupportLink.footer
         }
+        .settingsCardRow()
     }
 }
