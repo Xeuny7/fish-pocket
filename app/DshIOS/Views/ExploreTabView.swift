@@ -1,17 +1,16 @@
 import SwiftUI
 import WatchConnectivity
 
-/// The 探索 tab: 设置 first, then Mini Apps, then what the agent can be given beyond a
-/// conversation of its own — plugins, connectors (with this device's capabilities), phone control,
-/// the computers of remote control — then Apple Watch, Shortcuts, the web version and sharing the
-/// app, and last the rating, website, feedback and community links. On an iPad before iOS 18
-/// these are rows of the sidebar, Apple Watch, sharing and those links stay in 设置, and Mini
-/// Apps and 设置 are sheets.
+/// Account access, frequently used settings and tools in the 探索 tab.
 struct ExploreTabView: View {
-    enum Route: Hashable { case miniApps, plugins, connectors, phoneControl, remote, watch, shortcuts, share, settings }
+    enum Route: Hashable {
+        case account, models, schedules, installedPlugins, settings
+        case miniApps, plugins, connectors, phoneControl, remote, watch, shortcuts, share
+    }
 
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openSession) private var openSession
     @Binding var path: [Route]
     @State private var phoneControl = PhoneControlService()
     @State private var watch = WatchPairing.current
@@ -26,16 +25,22 @@ struct ExploreTabView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
+                    NavigationLink(value: Route.account) { ExploreAccountRow(account: app.account) }
+                }
+                Section {
+                    quickLink(.models, "模型", "cpu")
+                    quickLink(.schedules, "自动化", "clock.arrow.2.circlepath",
+                              status: app.scheduleCount.map { String(localized: "\($0) 个") })
                     // A button, not a link: the look goes on first and 设置 is pushed after it
                     // (`openSettings`), so the chevron is drawn here as a link's would be.
                     Button(action: openSettings) {
-                        label(Text("设置"), .settings, Text("模型、连接方式、语音和外观")) {
+                        label(Text("设置"), .settings, Text("访问权限、语音和外观")) {
                             Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
                         }
                     }
                     .foregroundStyle(Palette.ink)
                 } header: {
-                    Text("通用")
+                    Text("常用设置")
                 }
                 Section {
                     row(.miniApps, Text(MiniAppsPage.tabTitle), .miniApps, "与 AI 共创",
@@ -44,7 +49,8 @@ struct ExploreTabView: View {
                     Text("创作")
                 }
                 Section {
-                    row(.plugins, Text("插件"), .plugins, "安装和管理插件")
+                    row(.plugins, Text("插件市场"), .plugins, "查找和安装插件")
+                    quickLink(.installedPlugins, "已安装插件", "puzzlepiece.extension")
                     row(.connectors, Text("连接器"), .connectors, "GitHub、Notion 等服务和本机能力", status: connectorStatus)
                     row(.phoneControl, Text("操控手机"), .phoneControl, "让智能体点按其他 App", status: phoneControl.state == .running ? String(localized: "运行中") : nil,
                         live: phoneControl.state == .running)
@@ -82,11 +88,17 @@ struct ExploreTabView: View {
                     SupportLink.footer
                 }
             }
+            .groupedList()
             .tabEdgesSoftened()
+            .refreshable { await app.account.refreshDetails() }
             .navigationTitle("探索")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Route.self) { route in
                 switch route {
+                case .account: AccountPage().settingsStyle()
+                case .models: ModelProvidersPage().settingsStyle()
+                case .schedules: SchedulesView(openSession: openSession.map { open in { open($0) } }).settingsStyle()
+                case .installedPlugins: PluginsView().settingsStyle()
                 case .miniApps: MiniAppsPage()
                 case .plugins: PluginStoreView()
                 case .connectors: BotConnectorsPage().settingsStyle()
@@ -101,11 +113,13 @@ struct ExploreTabView: View {
             // The rows say whether iCTRL runs and whether the watch has the app; both change while
             // the user is in another app.
             .task { await phoneControl.refresh() }
+            .task { await app.account.refreshDetails() }
             .onAppear { watch = WatchPairing.current; miniApps.refresh() }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 watch = WatchPairing.current
                 Task { await phoneControl.refresh() }
+                if path.isEmpty { Task { await app.account.refreshDetails() } }
             }
         }
         .environment(\.systemLists, settingsLook)
@@ -150,6 +164,17 @@ struct ExploreTabView: View {
         }
     }
 
+    private func quickLink(_ route: Route, _ title: LocalizedStringKey, _ icon: String, status: String? = nil) -> some View {
+        NavigationLink(value: route) {
+            LabeledContent {
+                if let status { Text(status) }
+            } label: {
+                Label(title, systemImage: icon)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
     /// The mark of the rows that leave the page: the web version and the links at the foot.
     private var leavesArrow: some View {
         Image(systemName: "arrow.up.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
@@ -171,5 +196,74 @@ struct ExploreTabView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+/// A snapshot of the official account. AccountPage owns sign-in and wallet actions.
+private struct ExploreAccountRow: View {
+    let account: AccountModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        layout {
+            AccountAvatar(url: avatarURL, size: 46)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("DeepSeek 账号")
+                    .font(.headline)
+                    .foregroundStyle(Palette.ink)
+                Text(accountStatus)
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.secondary)
+                if account.signedIn { balances }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var avatarURL: URL? {
+        guard account.signedIn else { return nil }
+        return account.profileValue?["avatarUrl"].string.flatMap(URL.init(string:))
+    }
+
+    private var accountStatus: String {
+        if account.signedIn {
+            if let name = account.displayName, !name.isEmpty { return name }
+            return account.profile == nil ? String(localized: "账号资料加载中…") : String(localized: "已登录")
+        }
+        if account.attemptActive { return String(localized: "正在登录…") }
+        if account.streamFailed { return String(localized: "账号状态暂不可用") }
+        if account.view == nil { return String(localized: "加载中…") }
+        return String(localized: "未登录")
+    }
+
+    @ViewBuilder
+    private var balances: some View {
+        if let amount = formatted(account.wallets ?? []) {
+            Text("充值余额 \(amount)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Palette.ink)
+        } else {
+            Text(account.balance == nil ? String(localized: "余额加载中…") : String(localized: "余额暂不可用"))
+                .font(.footnote)
+                .foregroundStyle(Palette.secondary)
+        }
+        if let amount = formatted(account.bonusWallets) {
+            Text("赠金余额 \(amount)")
+                .font(.footnote.monospacedDigit())
+                .foregroundStyle(Palette.secondary)
+        }
+    }
+
+    private func formatted(_ wallets: [JSON]) -> String? {
+        let amounts = wallets.compactMap { wallet -> String? in
+            guard let amount = wallet["balance"].string, !amount.isEmpty else { return nil }
+            return formatBalance(amount, currency: wallet["currency"].string)
+        }
+        return amounts.isEmpty ? nil : amounts.joined(separator: " + ")
     }
 }

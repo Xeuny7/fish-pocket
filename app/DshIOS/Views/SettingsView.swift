@@ -2,13 +2,8 @@ import SafariServices
 import SwiftUI
 import WatchConnectivity
 
-/// Settings: only what people come here for (账号, 模型, 访问模式, 插件, 自动化, 后台运行: 静音音频,
-/// 任务续跑, 小组件), then the rarely touched 外观, App 图标 and 语言. Developer pages sit behind 高级, versions and
-/// engine status behind 关于, and 已归档会话 on its own below them. 本机能力 (under 连接器) and 远程控制 are on the 探索 tab (in the sidebar on an iPad before iOS 18), not here.
-/// 分享 Fish Pocket and Apple Watch open the list and the rating, website, feedback and community
-/// links close it (`SupportLink`) only on an iPad before iOS 18: elsewhere they are on the 探索 tab.
-/// The engine card shows here only while the engine is not running. Every page reads the shared
-/// settings mirror, so a write anywhere shows everywhere.
+/// Preferences and maintenance. 探索 shows the official account, models, schedules and installed
+/// plugins directly. The settings sheet keeps those entries when the device has no 探索 tab.
 struct SettingsView: View {
     /// A page of the 探索 tab, pushed from its top row, rather than a sheet: that tab's navigation
     /// stack and back button, no ✕. The stack sets the settings look for it (`ExploreTabView`).
@@ -102,19 +97,32 @@ private struct SettingsList: View {
                             : String(localized: "未登录"))
                     }
                 }
-                NavigationLink { AccountPage() } label: {
-                    row("DeepSeek 账号", "person.crop.circle", app.account.signedIn ? (app.account.displayName ?? String(localized: "已登录")) : String(localized: "未登录"))
+                if !pushed {
+                    NavigationLink { AccountPage() } label: {
+                        row("DeepSeek 账号", "person.crop.circle", app.account.signedIn ? (app.account.displayName ?? String(localized: "已登录")) : String(localized: "未登录"))
+                    }
                 }
                 DeepSeekKeyRow()
             } header: {
                 Text("连接方式")
             } footer: {
-                Text("几种方式相互独立，配置任意一种就能开始对话。")
+                if !pushed { Text("几种方式相互独立，配置任意一种就能开始对话。") }
             }
             .settingsCardRow()
 
+            if !pushed || mirror.serves("permission") {
+                Section {
+                    if !pushed {
+                        NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
+                    }
+                    if mirror.serves("permission") { permissionPicker }
+                } header: {
+                    Text(pushed ? LocalizedStringKey("权限") : LocalizedStringKey("模型与权限"))
+                }
+                .settingsCardRow()
+            }
+
             Section {
-                NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
                 NavigationLink { VoiceInputSettingsPage() } label: {
                     row("语音输入", "mic", VoicePreferences.shared.source == .volcengine && !VolcSpeech.shared.configured ? String(localized: "未设置") : VoicePreferences.shared.source.title)
                 }
@@ -134,19 +142,22 @@ private struct SettingsList: View {
                         row("生图", "photo.badge.plus", FishPocketImageGen.isChosen(value) ? FishPocketImageGen.title : (ImageGenProvider(rawValue: value["provider"].string ?? "") ?? .google).title)
                     }
                 }
-                if mirror.serves("permission") { permissionPicker }
+            } header: {
+                Text("声音与图像")
             }
             .settingsCardRow()
 
-            Section {
-                NavigationLink { PluginsView() } label: {
-                    row("插件", "puzzlepiece.extension", pluginCount.map { String(localized: "\($0) 个") } ?? "")
+            if !pushed {
+                Section {
+                    NavigationLink { PluginsView() } label: {
+                        row("插件", "puzzlepiece.extension", pluginCount.map { String(localized: "\($0) 个") } ?? "")
+                    }
+                    NavigationLink { SchedulesView(openSession: openSession.map { open in { open($0) } }) } label: {
+                        row("自动化", "clock.arrow.2.circlepath", app.scheduleCount.map { String(localized: "\($0) 个") } ?? "")
+                    }
                 }
-                NavigationLink { SchedulesView(openSession: openSession.map { open in { open($0) } }) } label: {
-                    row("自动化", "clock.arrow.2.circlepath", app.scheduleCount.map { String(localized: "\($0) 个") } ?? "")
-                }
+                .settingsCardRow()
             }
-            .settingsCardRow()
 
             Section {
                 // Turning it off asks first: without it the system may end the engine in the background.
@@ -213,12 +224,16 @@ private struct SettingsList: View {
                     AppLanguage.chosen = value == "system" ? nil : value
                     languageChanged = true
                 }
+            } header: {
+                Text("显示与语言")
             }
             .settingsCardRow()
 
             Section {
                 NavigationLink { AdvancedSettingsPage() } label: { row("高级", "wrench.and.screwdriver") }
                 NavigationLink { AboutPage(engineVersion: engineVersion) } label: { row("关于", "info.circle", aboutValue) }
+            } header: {
+                Text("维护")
             }
             .settingsCardRow()
 
@@ -250,7 +265,7 @@ private struct SettingsList: View {
         }
         .followSettings()
         .task { await load() }
-        .task(id: app.settingsRevision) { await loadDerived() }
+        .task(id: app.settingsRevision) { if !pushed { await loadDerived() } }
         .task(id: app.revision("permission-presets/catalog-changed")) { await loadPermissions() }
     }
 
@@ -317,7 +332,9 @@ private struct SettingsList: View {
     private func load() async {
         if let value = try? await app.client.call("pluginManager/listBundles") {
             let bundles = value.array
-            pluginCount = bundles.filter { $0["enabled"].bool == true && !PluginManagerModel.builtInProfileBundles.contains($0["name"].string ?? "") }.count
+            if !pushed {
+                pluginCount = bundles.filter { $0["enabled"].bool == true && !PluginManagerModel.builtInProfileBundles.contains($0["name"].string ?? "") }.count
+            }
             engineVersion = bundles.first { $0["name"].string == "@deepseek-ai/dsh-base" }?["version"].string
         }
         await app.account.refresh()
