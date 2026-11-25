@@ -485,7 +485,7 @@ struct StoreInstallConfirm: View {
         let number = choice.version["version"].string ?? ""
         let source = choice.version["source"]
         let pinned = PluginPins.note(package: entry.name, version: number)
-        VStack(alignment: .leading, spacing: 18) {
+        return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
                 StoreArt(name: entry.name, icon: entry.icon, size: 48)
                 VStack(alignment: .leading, spacing: 2) {
