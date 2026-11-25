@@ -66,3 +66,8 @@ echo "engine: $out ($((before/1024)) MB -> $((after/1024)) MB)"
 if [ -x "$root/tooling/skin/apply.py" ] || [ -f "$root/tooling/skin/apply.py" ]; then
   python3 "$root/tooling/skin/apply.py"
 fi
+
+# 皮肤层收尾：Bot 页导航栏透明，露出洗色底（否则顶部留白带）。
+if [ -f "$root/tooling/skin/navfix.py" ]; then
+  python3 "$root/tooling/skin/navfix.py"
+fi
