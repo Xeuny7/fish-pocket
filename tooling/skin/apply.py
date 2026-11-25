@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Pale-periwinkle wash + frosted-glass cards, applied before building.
+"""Pale-periwinkle wash + frosted glass, applied before building.
 
-Run by CI from scripts/build-engine.sh. Idempotent.
+Run by CI from scripts/build-engine.sh. Idempotent: every patch either applies
+once or reports "already applied"; a missing anchor fails the build.
 """
 import json
 import pathlib
@@ -12,6 +13,7 @@ V = ROOT / "app" / "DshIOS"
 SKIN = V / "Views" / "SkinStyle.swift"
 THEME = V / "Views" / "Theme.swift"
 SETTINGS = V / "Views" / "SettingsView.swift"
+BOT = V / "Views" / "BotViews.swift"
 APP = V / "DshIOSApp.swift"
 CONV = V / "Views" / "ConversationView.swift"
 RECORDS = V / "Views" / "FishPocketRecordsPage.swift"
@@ -56,11 +58,22 @@ struct IconLabel: View {
 }
 
 /// The same glass the tab bar uses: ultra-thin material, 16pt continuous
-/// corners, pulled in from the row edges so the wash shows in between.
+/// corners, pulled in from the edges so the wash shows in between.
 struct GlassFill: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(.ultraThinMaterial)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+    }
+}
+
+/// An opaque or tinted counterpart for a picked row, in the same shape.
+struct SolidFill: View {
+    let color: Color
+    var body: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(color)
             .padding(.horizontal, 10)
             .padding(.vertical, 3)
     }
@@ -188,6 +201,56 @@ THEME_PATCHES = [
         "            content.listRowBackground(GlassFill()).listRowSeparator(.hidden)\n"
         "        }",
     ),
+    (
+        "conversation dock",
+        "    func conversationDock(@ViewBuilder _ dock: () -> some View) -> some View {\n"
+        "        if #available(iOS 26.0, *) {\n"
+        "            safeAreaBar(edge: .bottom, spacing: 0, content: dock)\n"
+        "        } else {\n"
+        "            safeAreaInset(edge: .bottom, spacing: 0) { dock().background(Palette.background) }\n"
+        "        }\n"
+        "    }",
+        "    func conversationDock(@ViewBuilder _ dock: () -> some View) -> some View {\n"
+        "        safeAreaInset(edge: .bottom, spacing: 0) {\n"
+        "            dock()\n"
+        "                .background(AppBackground())\n"
+        "        }\n"
+        "    }",
+    ),
+]
+
+BOT_ROW_GLASS = (
+    "    @ViewBuilder\n"
+    "    private func rowGlass(_ route: BotRoute) -> some View {\n"
+    "        if let selection, selection.wrappedValue == route {\n"
+    "            SolidFill(color: Palette.bubble)\n"
+    "        } else {\n"
+    "            GlassFill()\n"
+    "        }\n"
+    "    }\n\n"
+)
+
+BOT_PATCHES = [
+    (
+        "bot page background",
+        '        .background(Palette.background)\n        .navigationTitle("Bot")',
+        '        .background(AppBackground())\n        .navigationTitle("Bot")',
+    ),
+    (
+        "bot row glass",
+        "            .listRowBackground(pickedFill(.bot(bot.id)))",
+        "            .listRowBackground(rowGlass(.bot(bot.id)))\n            .listRowSeparator(.hidden)",
+    ),
+    (
+        "room row glass",
+        "            .listRowBackground(pickedFill(.room(room.id)))",
+        "            .listRowBackground(rowGlass(.room(room.id)))\n            .listRowSeparator(.hidden)",
+    ),
+    (
+        "rowGlass helper",
+        "    private func pickedFill(_ route: BotRoute) -> Color? {",
+        BOT_ROW_GLASS + "    private func pickedFill(_ route: BotRoute) -> Color? {",
+    ),
 ]
 
 OTHER_PATCHES = [
@@ -216,8 +279,6 @@ OTHER_PATCHES = [
 
 SOFT_PATCHES = [
     (THEME, "switch tint", ".tint(.green)", ".tint(Palette.link)"),
-    (THEME, "row hairline", "listRowSeparator(.hidden)",
-     "listRowSeparator(.visible).listRowSeparatorTint(Palette.stroke)"),
     (SETTINGS, "grouped bg", "Color(.secondarySystemGroupedBackground)", "Palette.grouped"),
 ]
 
@@ -306,6 +367,9 @@ def main() -> int:
 
     for label, old, new in THEME_PATCHES:
         patch(THEME, label, old, new)
+
+    for label, old, new in BOT_PATCHES:
+        patch(BOT, label, old, new)
 
     for path, label, old, new in OTHER_PATCHES:
         patch(path, label, old, new)
