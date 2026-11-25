@@ -2,10 +2,6 @@
 """Pale-periwinkle wash + frosted-glass cards, applied before building.
 
 Run by CI from scripts/build-engine.sh. Idempotent.
-
-Cards follow the tab bar's material exactly: same `.ultraThinMaterial`, same
-continuous rounded rectangle, with a small gap between rows so each row reads as
-its own piece of glass instead of a full-width white band.
 """
 import json
 import pathlib
@@ -70,15 +66,24 @@ struct GlassFill: View {
     }
 }
 
+enum SkinTone {
+    static let top = Color(red: 0xDF / 255, green: 0xE5 / 255, blue: 0xFD / 255)
+    static let middle = Color(red: 0xE7 / 255, green: 0xEB / 255, blue: 0xFE / 255)
+    static let bottom = Color(red: 0xF0 / 255, green: 0xF0 / 255, blue: 0xFA / 255)
+
+    static var topUI: UIColor { UIColor(top) }
+    static var bottomUI: UIColor { UIColor(bottom) }
+}
+
 struct AppBackground: View {
     var body: some View {
         ZStack {
-            Palette.background
+            SkinTone.middle
             LinearGradient(
                 stops: [
-                    .init(color: Color(red: 0xDF / 255, green: 0xE5 / 255, blue: 0xFD / 255), location: 0.00),
-                    .init(color: Color(red: 0xE7 / 255, green: 0xEB / 255, blue: 0xFE / 255), location: 0.45),
-                    .init(color: Color(red: 0xF0 / 255, green: 0xF0 / 255, blue: 0xFA / 255), location: 1.00),
+                    .init(color: SkinTone.top, location: 0.00),
+                    .init(color: SkinTone.middle, location: 0.45),
+                    .init(color: SkinTone.bottom, location: 1.00),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -87,20 +92,26 @@ struct AppBackground: View {
     }
 }
 
+/// System bars share the wash instead of drawing white: the navigation bar gets
+/// the gradient's top colour, the tab bar its bottom colour, both without a
+/// hairline, so no edge can read as a seam.
 enum SkinBars {
     static func install() {
         let nav = UINavigationBarAppearance()
-        nav.configureWithTransparentBackground()
-        nav.backgroundColor = .clear
+        nav.configureWithOpaqueBackground()
+        nav.backgroundColor = SkinTone.topUI
         nav.shadowColor = .clear
+        nav.titleTextAttributes = [.foregroundColor: UIColor(Palette.ink)]
+        nav.largeTitleTextAttributes = [.foregroundColor: UIColor(Palette.ink)]
         UINavigationBar.appearance().standardAppearance = nav
         UINavigationBar.appearance().scrollEdgeAppearance = nav
         UINavigationBar.appearance().compactAppearance = nav
         UINavigationBar.appearance().compactScrollEdgeAppearance = nav
+        UINavigationBar.appearance().tintColor = UIColor(Palette.ink)
 
         let tab = UITabBarAppearance()
-        tab.configureWithTransparentBackground()
-        tab.backgroundColor = .clear
+        tab.configureWithOpaqueBackground()
+        tab.backgroundColor = SkinTone.bottomUI
         tab.shadowColor = .clear
         UITabBar.appearance().standardAppearance = tab
         UITabBar.appearance().scrollEdgeAppearance = tab
@@ -198,7 +209,7 @@ OTHER_PATCHES = [
     (PANELS, "remote panel",
      "        .background(Color(.systemBackground))\n        .navigationTitle(entry.name)",
      "        .background(AppBackground())\n        .navigationTitle(entry.name)"),
-    (APP, "install transparent bars",
+    (APP, "install bars",
      "        MiniAppCompiler.shared.warmUp()\n    }",
      "        MiniAppCompiler.shared.warmUp()\n        SkinBars.install()\n    }"),
 ]
