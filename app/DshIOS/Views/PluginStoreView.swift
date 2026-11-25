@@ -473,6 +473,7 @@ struct StoreArt: View {
 
 private struct StoreRow: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let entry: StoreEntry
     let model: PluginStoreModel
     let wide: Bool
@@ -481,20 +482,24 @@ private struct StoreRow: View {
     private var metadata: JSON { model.market.result?["metadata"] ?? .null }
 
     var body: some View {
-        HStack(spacing: 10) {
+        let layout = wide && !dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: 10))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+        layout {
             NavigationLink {
                 StoreEntryDetail(listing: entry, model: model, install: install)
             } label: {
                 HStack(spacing: 12) {
                     StoreArt(name: entry.name, icon: entry.icon)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.displayName).font(.callout).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(entry.displayName).font(.callout).foregroundStyle(Palette.ink)
                         if let summary = entry.summary {
-                            Text(summary).font(.footnote).foregroundStyle(Palette.secondary).lineLimit(1)
+                            Text(summary).font(.footnote).foregroundStyle(Palette.secondary)
                         }
-                        Text(meta).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1)
+                        Text(meta).font(.caption).foregroundStyle(Palette.secondary)
                         if !labels.isEmpty { tags.padding(.top, 2) }
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -518,9 +523,12 @@ private struct StoreRow: View {
             tagLine(3)
             tagLine(2)
             tagLine(1)
+            VStack(alignment: .leading, spacing: 4) {
+                if let first = labels.first { PluginTag(text: first) }
+                if labels.count > 1 { PluginTag(text: "+\(labels.count - 1)") }
+            }
         }
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        .clipped()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func tagLine(_ count: Int) -> some View {
@@ -564,7 +572,8 @@ private struct StoreRow: View {
     }
 
     private func note(_ text: String) -> some View {
-        Text(text).font(.footnote.weight(.medium)).foregroundStyle(Palette.secondary).fixedSize()
+        Text(text).font(.footnote.weight(.medium)).foregroundStyle(Palette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// An entry on this device opens its page in 已安装.

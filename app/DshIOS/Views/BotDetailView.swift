@@ -14,6 +14,7 @@ struct BotDetailView: View {
     /// The pages pushed on the Bot's own.
     @State private var path: [Tab]
     @State private var appearanceOpen = false
+    @State private var colorPreview: String?
     @State private var schedules: BotSchedules
     @State private var confirmingDelete = false
     @State private var exchange: BotExchangePair?
@@ -26,6 +27,7 @@ struct BotDetailView: View {
 
     var body: some View {
         let team = app.botTeam
+        let accent = BotInk.color(colorPreview ?? team.bot(botId)?.colorKey)
         NavigationStack(path: $path) {
             Group {
                 if let bot = team.bot(botId) {
@@ -36,7 +38,9 @@ struct BotDetailView: View {
                         profile(bot)
                     }
                     .groupedList()
-                    .sheet(isPresented: $appearanceOpen) { BotAppearanceSheet(botId: bot.id) }
+                    .sheet(isPresented: $appearanceOpen) {
+                        BotAppearanceSheet(botId: bot.id, colorPreview: $colorPreview)
+                    }
                     .sheet(item: $exchange) { BotExchangeSheet(pair: $0) }
                     .confirmationDialog("删除\(bot.name)？", isPresented: $confirmingDelete, titleVisibility: .visible) {
                         Button("删除", role: .destructive) { Task { await delete(bot) } }
@@ -61,6 +65,7 @@ struct BotDetailView: View {
             .botSchedules(schedules, app: app)
         }
         .settingsStyle()
+        .environment(\.botSettingsAccent, accent)
     }
 
     /// The Bot's face, what it is for, and what it is up to. A tap on the face changes it.
@@ -68,11 +73,11 @@ struct BotDetailView: View {
         let team = app.botTeam
         return VStack(spacing: 8) {
             Button { appearanceOpen = true } label: {
-                BotAvatar(bot: bot, size: 88, live: true)
+                BotAvatar(bot: bot, size: 88, live: true, previewColor: BotInk.color(colorPreview))
                     .overlay(alignment: .bottomTrailing) {
                         Image(systemName: "pencil").font(.system(size: 12, weight: .bold)).foregroundStyle(.primary)
-                            .frame(width: 28, height: 28).background(Color(.secondarySystemGroupedBackground), in: Circle())
-                            .overlay(Circle().stroke(Color(.systemGroupedBackground), lineWidth: 2))
+                            .frame(width: 28, height: 28).background(Palette.grouped, in: Circle())
+                            .overlay(Circle().strokeBorder(Palette.stroke, lineWidth: 1))
                     }
             }
             .buttonStyle(.plain)
@@ -92,11 +97,16 @@ struct BotDetailView: View {
     }
 
     private func row(_ title: LocalizedStringKey, _ icon: String, _ value: String = "") -> some View {
-        LabeledContent {
-            Text(value).lineLimit(1)
-        } label: {
-            Label(title, systemImage: icon)
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).foregroundStyle(Palette.ink)
+                if !value.isEmpty { Text(value).font(.footnote).foregroundStyle(Palette.secondary) }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: icon)
         }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -120,6 +130,7 @@ struct BotDetailView: View {
                 row("声音", "waveform", VoiceChoices.shared.summary(of: .bot(bot.id)))
             }
         }
+        .groupedRow()
         Section {
             NavigationLink { BotModelPage(botId: bot.id) } label: {
                 row("模型", "cpu", team.modelName(bot.model) ?? String(localized: "未选择"))
@@ -140,6 +151,7 @@ struct BotDetailView: View {
         } header: {
             Text("工作方式")
         }
+        .groupedRow()
         Section {
             NavigationLink(value: Tab.schedules) {
                 row("定时任务", "clock", schedules.loaded && !schedules.tasks.isEmpty ? String(localized: "\(schedules.tasks.count) 个") : "")
@@ -148,8 +160,11 @@ struct BotDetailView: View {
                 NavigationLink(value: Tab.memory) { row("记忆", "brain.head.profile") }
             }
         }
+        .groupedRow()
         capabilities(bot)
+            .groupedRow()
         connectors(bot)
+            .groupedRow()
         if team.bots.count > 1 {
             Section {
                 ForEach(team.bots.filter { $0.id != bot.id }) { other in
@@ -163,6 +178,7 @@ struct BotDetailView: View {
                     }
                 }
             } header: { Text("和别的 Bot 的往来") } footer: { Text("Bot 之间交代、回复的话不出现在它和你的聊天里，在这里看。") }
+            .groupedRow()
         }
         Section {
             if team.isMain(bot) {
@@ -200,10 +216,12 @@ struct BotDetailView: View {
                 Text("主 Bot 接下你交代的事，再分给合适的 Bot。主 Bot 不能删除，要删先把别的 Bot 设为主 Bot。")
             }
         }
+        .groupedRow()
         Section {
             Button("删除这个 Bot", role: .destructive) { confirmingDelete = true }
                 .disabled(team.isMain(bot))
         }
+        .groupedRow()
         Section {
             Button { dismiss(); app.webRequest = UUID() } label: {
                 Text("在网页版中打开").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)

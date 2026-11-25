@@ -443,12 +443,13 @@ private struct RemoteDevicesList: View {
             HStack(spacing: 12) {
                 Image(systemName: device.symbol).font(.title3).foregroundStyle(device.online ? Palette.ink : Palette.faint).frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(device.name).font(.callout.weight(.medium)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(device.name).font(.callout.weight(.medium)).foregroundStyle(Palette.ink)
                     HStack(spacing: 6) {
                         if device.online { StatusDot(state: .running) }
                         Text(status(device, sessions: count)).font(.caption).foregroundStyle(Palette.secondary)
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 Menu {
                     Button { app.remoteSessionRequest = RemoteSessionTarget(deviceId: device.id) } label: { Label("新建会话", systemImage: "square.and.pencil") }
@@ -470,13 +471,14 @@ private struct RemoteDevicesList: View {
             if !agents.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(agents) { agent in
-                        HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(agent.name).font(.footnote).foregroundStyle(Palette.ink)
                             Text(agent.statusText).font(.caption).foregroundStyle(agent.status == "error" ? Palette.removed : Palette.secondary)
                             if let reason = agent.reason, !reason.isEmpty, !agent.ready {
-                                Text(reason).font(.caption).foregroundStyle(Palette.faint).lineLimit(1)
+                                Text(reason).font(.caption).foregroundStyle(Palette.faint)
                             }
                         }
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.leading, 40)

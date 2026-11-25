@@ -33,7 +33,7 @@ struct ExploreTabView: View {
                     // A button, not a link: the look goes on first and 设置 is pushed after it
                     // (`openSettings`), so the chevron is drawn here as a link's would be.
                     Button(action: openSettings) {
-                        label(Text("设置"), .settings, Text("访问权限、语音和外观")) {
+                        label(Text("设置"), .settings, Text("访问权限、语音和外观"), status: nil) {
                             Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Palette.faint)
                         }
                     }
@@ -162,15 +162,10 @@ struct ExploreTabView: View {
     private func row(_ route: Route, _ title: Text, _ icon: ExploreGlyph.Kind, _ detail: LocalizedStringKey,
                      status: String? = nil, warns: Bool = false, live: Bool = false) -> some View {
         NavigationLink(value: route) {
-            label(title, icon, Text(detail)) {
-                if let status {
-                    HStack(spacing: 5) {
-                        if live { Circle().fill(Palette.running).frame(width: 7, height: 7) }
-                        Text(status)
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(warns ? Palette.waiting : Palette.secondary)
-                    .lineLimit(1)
+            label(title, icon, Text(detail), status: status, warns: warns) {
+                if live {
+                    Circle().fill(Palette.running).frame(width: 7, height: 7)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -178,10 +173,14 @@ struct ExploreTabView: View {
 
     private func quickLink(_ route: Route, _ title: LocalizedStringKey, _ icon: String, status: String? = nil) -> some View {
         NavigationLink(value: route) {
-            LabeledContent {
-                if let status { Text(status).foregroundStyle(Palette.secondary) }
-            } label: {
-                Label(title, systemImage: icon)
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).foregroundStyle(Palette.ink)
+                    if let status { Text(status).font(.footnote).foregroundStyle(Palette.secondary) }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: icon)
             }
             .padding(.vertical, 4)
         }
@@ -193,18 +192,20 @@ struct ExploreTabView: View {
     }
 
     /// The entry's drawn icon, the name and a line on what it is for, and what it says on the right.
-    private func label(_ title: Text, _ icon: ExploreGlyph.Kind, _ detail: Text,
+    private func label(_ title: Text, _ icon: ExploreGlyph.Kind, _ detail: Text, status: String? = nil, warns: Bool = false,
                        @ViewBuilder trailing: () -> some View) -> some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 14) {
             ExploreGlyph(kind: icon)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 title.font(.body).foregroundStyle(Palette.ink)
-                detail.font(.footnote).foregroundStyle(Palette.secondary).lineLimit(2)
+                detail.font(.footnote).foregroundStyle(Palette.secondary)
+                if let status {
+                    Text(status).font(.footnote).foregroundStyle(warns ? Palette.waiting : Palette.secondary)
+                }
             }
-            Spacer(minLength: 8)
-            // The status whole first: cut short it says nothing ("1…" for one service connected),
-            // and the line under the name has a second row to go to.
-            trailing().layoutPriority(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            trailing()
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

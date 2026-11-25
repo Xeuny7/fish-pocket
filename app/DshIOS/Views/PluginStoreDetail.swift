@@ -286,26 +286,40 @@ struct StoreEntryDetail: View {
     }
 
     private func fact(_ title: LocalizedStringKey, _ value: String) -> some View {
-        HStack(spacing: 16) {
-            Text(title).font(.callout).foregroundStyle(Palette.ink).fixedSize()
-            Spacer(minLength: 0)
-            Text(value).font(.footnote).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+        metadataRow(title) {
+            Text(value).font(.footnote).foregroundStyle(Palette.secondary).textSelection(.enabled)
         }
-        .padding(.horizontal, 18)
-        .frame(minHeight: 44)
     }
 
     private func link(_ title: LocalizedStringKey, _ url: URL) -> some View {
         Link(destination: url) {
-            HStack(spacing: 16) {
-                Text(title).font(.callout).foregroundStyle(Palette.ink).fixedSize()
-                Spacer(minLength: 0)
-                Text(url.host().map { $0 + url.path() } ?? url.absoluteString).font(.footnote).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle)
+            metadataRow(title) {
+                Text(url.host().map { $0 + url.path() } ?? url.absoluteString)
+                    .font(.footnote).foregroundStyle(Palette.secondary)
             }
-            .padding(.horizontal, 18)
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
         }
+    }
+
+    private func metadataRow(_ title: LocalizedStringKey, @ViewBuilder value: () -> some View) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(title).font(.callout).foregroundStyle(Palette.ink)
+                Spacer(minLength: 0)
+                value()
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.callout).foregroundStyle(Palette.ink)
+                value()
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 6)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private var versions: some View {
@@ -315,12 +329,11 @@ struct StoreEntryDetail: View {
                 let compatibility = version["compatibility"]
                 let allowed = compatibility["compatible"].bool == true || compatibility["exempted"].bool == true
                 let installed = entry.json["installation"]["installedVersion"].string == number
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(number).font(.callout.monospaced()).foregroundStyle(Palette.ink)
                     if entry.json["defaultVersion"].string == number { PluginTag(text: String(localized: "推荐"), tone: Palette.running) }
                     if installed { PluginTag(text: String(localized: "当前已安装")) }
                     if !allowed { PluginTag(text: String(localized: "不兼容"), tone: Palette.removed) }
-                    Spacer(minLength: 0)
                     if allowed, !installed, !removed, model.status(entry, app) != "provided" {
                         Button("安装") {
                             // An update goes only forward (`updateBundle`), as on the web; an older version
@@ -337,7 +350,10 @@ struct StoreEntryDetail: View {
                         .disabled(onDevice && updating)
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 18)
+                .padding(.vertical, 8)
                 .frame(minHeight: 52)
             }
         }
@@ -453,6 +469,19 @@ struct StoreInstallConfirm: View {
     private var entry: StoreEntry { StoreEntry(json: choice.entry) }
 
     var body: some View {
+        ScrollView {
+            confirmation
+                .padding(20)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationBackground(Palette.background)
+        .presentationDetents([.height(min(height, 580)), .large])
+        .inkTint()
+    }
+
+    private var confirmation: some View {
         let number = choice.version["version"].string ?? ""
         let source = choice.version["source"]
         let pinned = PluginPins.note(package: entry.name, version: number)
@@ -460,7 +489,7 @@ struct StoreInstallConfirm: View {
             HStack(spacing: 12) {
                 StoreArt(name: entry.name, icon: entry.icon, size: 48)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("安装「\(entry.displayName)」？").font(.headline).foregroundStyle(Palette.ink).lineLimit(2)
+                    Text("安装「\(entry.displayName)」？").font(.headline).foregroundStyle(Palette.ink)
                     Text(number).font(.footnote.monospaced()).foregroundStyle(Palette.secondary)
                 }
             }
@@ -499,19 +528,13 @@ struct StoreInstallConfirm: View {
                 .disabled(pinned != nil || PluginReports.shared.removed(entry.name))
             }
         }
-        .padding(20)
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationBackground(Palette.background)
-        .presentationDetents([.height(height)])
-        .inkTint()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func line(_ title: LocalizedStringKey, _ value: Text) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title).foregroundStyle(Palette.secondary).frame(width: 52, alignment: .leading)
-            value.foregroundStyle(Palette.ink).lineLimit(2)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).foregroundStyle(Palette.secondary)
+            value.foregroundStyle(Palette.ink)
         }
         .font(.subheadline)
     }

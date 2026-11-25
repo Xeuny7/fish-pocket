@@ -40,6 +40,7 @@ struct BotTextPage: View {
                 }
             }
         }
+        .groupedList()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .saveToolbar(canSave: canSave(trimmed, over: over), saving: saving) { commit(trimmed) }
@@ -235,6 +236,7 @@ struct BotAppearanceSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     let botId: String
+    @Binding var colorPreview: String?
     @State private var photo: PhotosPickerItem?
     @State private var saving = false
     /// Photos used before (ds-bot's avatar library): `{id, name, image}`, newest first.
@@ -248,7 +250,14 @@ struct BotAppearanceSheet: View {
                     Section {
                         HStack {
                             Spacer()
-                            BotAvatar(bot: bot, size: 96, live: true)
+                            BotAvatar(bot: bot, size: 96, live: true, previewColor: BotInk.color(colorPreview))
+                                .padding(4)
+                                .overlay {
+                                    if let color = BotInk.color(colorPreview ?? bot.colorKey) {
+                                        Circle().strokeBorder(color, lineWidth: 2)
+                                            .allowsHitTesting(false)
+                                    }
+                                }
                             Spacer()
                         }
                         .listRowBackground(Color.clear)
@@ -264,7 +273,7 @@ struct BotAppearanceSheet: View {
                     .groupedRow()
                     if !library.isEmpty {
                         Section("用过的照片") {
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 58, maximum: 72), spacing: 10)], spacing: 10) {
                                 ForEach(library, id: \.["id"]) { item in
                                     if let url = item["image"].string, let image = BotPicture.image(url) {
                                         Button { save(bot, avatar: ["image": .string(url)]) } label: {
@@ -289,12 +298,13 @@ struct BotAppearanceSheet: View {
                             bot.avatarImage != nil || team.usesAppMark(bot) ? nil : team.character(of: bot).id
                         }, set: { shape in
                             if let shape { save(bot, avatar: ["shape": .string(shape)]) }
-                        }), color: Binding(get: { bot.colorKey }, set: { key in if let key { colour(bot, key) } }))
+                        }), color: Binding(get: { colorPreview ?? bot.colorKey }, set: { key in if let key { colour(bot, key) } }))
                     } header: { Text("内置形象") } footer: { Text("选一个形状，再配一个颜色。") }
                     .groupedRow()
                 }
                 .groupedList()
-                .disabled(saving)
+                .environment(\.botSettingsAccent, BotInk.color(colorPreview ?? bot.colorKey))
+                .disabled(saving || colorPreview != nil)
                 .navigationTitle("头像")
                 .navigationBarTitleDisplayMode(.inline)
                 .closeButton(dismiss)
@@ -328,9 +338,12 @@ struct BotAppearanceSheet: View {
     }
 
     private func colour(_ bot: BotInfo, _ key: String) {
-        guard key != bot.colorKey else { return }
-        Haptics.select()
-        Task { await app.botTeam.update(bot, ["color": .string(key)]) }
+        guard colorPreview == nil, !saving, key != bot.colorKey else { return }
+        colorPreview = key
+        Task {
+            defer { colorPreview = nil }
+            await app.botTeam.update(bot, ["color": .string(key)])
+        }
     }
 
     private func save(_ bot: BotInfo, avatar: JSON) {

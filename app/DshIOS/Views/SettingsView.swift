@@ -290,11 +290,13 @@ private struct SettingsList: View {
     }
 
     private func row(_ title: LocalizedStringKey, _ icon: String, _ value: String = "") -> some View {
-        LabeledContent {
-            Text(value).lineLimit(1)
-        } label: {
+        VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: icon)
+            if !value.isEmpty {
+                Text(value).font(.footnote).foregroundStyle(Palette.secondary)
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// G-01: the permission new sessions start with; full access asks first.
@@ -365,8 +367,14 @@ private struct SettingsList: View {
 
     private func write(_ ns: String, _ path: [String], _ value: JSON) async {
         do {
-            try await mirror.set(ns, path, value)
-            if ns == "ui-theme" { await app.reloadTheme() }
+            let updated = try await mirror.set(ns, path, value)
+            if ns == "ui-theme" {
+                if let preference = updated["value"]["preference"].string {
+                    UserDefaults.standard.set(preference, forKey: ThemePreference.key)
+                } else {
+                    await app.reloadTheme()
+                }
+            }
         } catch {
             Haptics.error()
             app.showToast(describeFailure(error), duration: 5)

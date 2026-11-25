@@ -42,9 +42,12 @@ private enum SkinTone {
 }
 
 struct AppBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        ZStack {
-            SkinTone.middle
+        if colorScheme == .dark {
+            Palette.background
+        } else {
             LinearGradient(
                 stops: [
                     .init(color: SkinTone.top, location: 0.00),
@@ -83,13 +86,17 @@ extension View {
 
 /// A stable fill keeps the outline and text legible when there is little content behind the panel.
 private struct FeaturePanel: View {
+    @Environment(\.botSettingsAccent) private var accent
     var cornerRadius: CGFloat = 18
     var fill = Palette.grouped
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         shape.fill(fill)
-            .overlay { shape.strokeBorder(Palette.stroke, lineWidth: 1) }
+            .overlay {
+                if let accent { shape.fill(accent.opacity(0.12)) }
+                shape.strokeBorder(accent ?? Palette.stroke, lineWidth: 1)
+            }
             .allowsHitTesting(false)
     }
 }
@@ -187,6 +194,7 @@ extension ButtonStyle where Self == CapsuleButtonStyle {
 extension EnvironmentValues {
     /// Settings context for views that still differentiate their system presentation.
     @Entry var systemLists = false
+    @Entry var botSettingsAccent: Color? = nil
 }
 
 /// Every switch in the app: the system's, in its green. Left to the page's ink tint, the track is
@@ -247,6 +255,7 @@ struct GroupedListStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .listStyle(.insetGrouped)
+            .contentMargins(.bottom, 16, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .featurePage()
     }
@@ -257,7 +266,14 @@ private struct GroupedRowStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .listRowBackground(FeaturePanel(fill: highlighted ? Palette.control : Palette.grouped).padding(.vertical, 3))
+            // The native list also masks its first and last rows to the section shape.
+            // Keep the custom outline inside that mask on every side.
+            .listRowBackground(
+                FeaturePanel(cornerRadius: 14, fill: highlighted ? Palette.control : Palette.grouped)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .accessibilityHidden(true)
+            )
             .listRowSeparator(.hidden)
     }
 }

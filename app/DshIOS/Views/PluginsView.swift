@@ -423,25 +423,28 @@ private struct PluginCard: View {
         NavigationLink {
             PluginDetailView(name: package.name)
         } label: {
-            HStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
                 PluginIcon(source: package.icon)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(package.title).font(.callout).foregroundStyle(Palette.ink).lineLimit(1)
-                        PluginTags(package: package, version: false)
-                    }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(package.title).font(.callout).foregroundStyle(Palette.ink)
                     if let summary = package.summary {
-                        Text(summary).font(.footnote).foregroundStyle(Palette.secondary).lineLimit(1)
+                        Text(summary).font(.footnote).foregroundStyle(Palette.secondary)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) { PluginTags(package: package, version: false) }
+                            .fixedSize(horizontal: true, vertical: false)
+                        VStack(alignment: .leading, spacing: 4) { PluginTags(package: package, version: false) }
+                    }
+                    if manager.isBusy(package) {
+                        ProgressView()
+                    } else if package.availability != "missing" {
+                        Text(package.stalled ? "未运行" : package.enabled ? "已启用" : "已停用")
+                            .font(.footnote)
+                            .foregroundStyle(package.stalled ? Palette.removed : Palette.secondary)
                     }
                 }
-                Spacer(minLength: 8)
-                if manager.isBusy(package) {
-                    ProgressView()
-                } else if package.availability != "missing" {
-                    Text(package.stalled ? "未运行" : package.enabled ? "已启用" : "已停用")
-                        .font(.footnote)
-                        .foregroundStyle(package.stalled ? Palette.removed : Palette.secondary)
-                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, 3)
         }

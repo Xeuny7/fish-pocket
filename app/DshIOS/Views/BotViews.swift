@@ -22,6 +22,7 @@ struct BotAvatar: View {
     var mood: BotMood?
     /// The page's colour, drawn around the mark where marks overlap.
     var outline: Color?
+    var previewColor: Color?
 
     var body: some View {
         let team = app.botTeam
@@ -32,7 +33,7 @@ struct BotAvatar: View {
             } else if let data = bot?.avatarImage, let image = BotPicture.image(data) {
                 picture(Image(uiImage: image), mood: mood)
             } else if let bot {
-                BotMark(character: team.character(of: bot), color: team.color(of: bot), size: size, mood: mood,
+                BotMark(character: team.character(of: bot), color: previewColor ?? team.color(of: bot), size: size, mood: mood,
                         lively: live && size >= 64, seed: bot.id, outline: outline)
             } else {
                 Text(String((name ?? "?").prefix(1)))
@@ -731,7 +732,7 @@ struct BotLookPicker: View {
         let ink = BotInk.color(color) ?? Palette.secondary
         VStack(spacing: 16) {
             // The whale stays the main Bot's.
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 52, maximum: 64), spacing: 6)], spacing: 10) {
                 ForEach(BotCharacter.all.filter { $0.id != "whale" }) { character in
                     Button { Haptics.select(); shape = character.id } label: {
                         BotMark(character: character, color: ink, size: 40, ringed: shape == character.id)
@@ -745,12 +746,12 @@ struct BotLookPicker: View {
                 }
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: shape)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44, maximum: 56), spacing: 6)], spacing: 12) {
                 ForEach(team.colorKeys, id: \.self) { key in
                     Button { Haptics.select(); color = key } label: {
                         Circle().fill(BotInk.color(key) ?? Palette.secondary).frame(width: 26, height: 26)
                             .overlay(Circle().stroke(BotInk.color(key) ?? Palette.secondary, lineWidth: color == key ? 2 : 0).padding(-5))
-                            .frame(width: 44, height: 36)
+                            .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
