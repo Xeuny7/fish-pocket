@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-"""Apply the dsh-go style skin to the whole iOS app before building.
+"""Apply the dark-saas skin to the whole iOS app before building.
 
-Run by CI from scripts/build-engine.sh. Idempotent; every anchor that cannot be
-found aborts the build, so a half-skinned app can never ship silently.
+Run by CI from scripts/build-engine.sh. Idempotent. Structural anchors abort the
+build when missing; cosmetic ones only warn.
 
-Layers:
-  1. writes app/DshIOS/Views/SkinStyle.swift (badge, page surface, modifier)
-  2. Theme.swift: page + grouped-list backgrounds use the page surface, and
-     settings rows take the card colour (this is the global switch: 39 views
-     draw through groupedList(), 5 through pageBackground())
-  3. app root, conversation view, remote panel, fish-pocket pages: the few
-     places that paint their own background
-  4. SettingsView.swift: row icons become tonal symbols
+Palette: near-black canvas, layered slate panels, electric-blue accent, teal /
+amber status, hairline borders, tighter label tracking.
 """
+import json
 import pathlib
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 V = ROOT / "app" / "DshIOS"
@@ -28,21 +22,22 @@ RECORDS = V / "Views" / "FishPocketRecordsPage.swift"
 POCKET = V / "Views" / "FishPocketViews.swift"
 PANELS = V / "Remote" / "RemotePanels.swift"
 
-SKIN_SWIFT = r"""// dsh-go 风格皮肤层（由 tooling/skin/apply.py 生成，勿手改）
+SKIN_SWIFT = r"""// dark-saas 皮肤层（由 tooling/skin/apply.py 生成，勿手改）
 import SwiftUI
 
+/// 设置行左侧方块徽标：28x28、8pt 圆角、深色底 + 电光蓝字形。
 struct SettingsBadge: View {
     let icon: String
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: 16, weight: .medium))
-            .foregroundStyle(Palette.secondary)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Palette.link)
             .frame(width: 28, height: 28)
+            .background(Palette.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .accessibilityHidden(true)
     }
 }
 
-/// 设置里一行：徽标 + 标题。
 struct IconLabel: View {
     let title: LocalizedStringKey
     let icon: String
@@ -60,16 +55,39 @@ struct IconLabel: View {
     }
 }
 
+/// 全局画布：近黑底 + 顶部一层极淡强调色辉光（不是整页渐变）。
 struct AppBackground: View {
-    var body: some View { Palette.background }
+    var body: some View {
+        Palette.background
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [Palette.link.opacity(0.10), Palette.link.opacity(0.0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 220)
+                .allowsHitTesting(false)
+            }
+    }
+}
+
+/// 分组标题：小号、字距略放、次要色。
+struct SaaSGroupCaption: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 12, weight: .semibold))
+            .tracking(0.8)
+            .foregroundStyle(Palette.faint)
+    }
 }
 
 extension View {
-    /// 让系统 grouped 列表的自家底色透出 AppBackground。
     func skinListBackground() -> some View {
         scrollContentBackground(.hidden)
             .background(AppBackground().ignoresSafeArea())
     }
+
+    func saasGroupCaption() -> some View { modifier(SaaSGroupCaption()) }
 }
 """
 
@@ -129,7 +147,7 @@ THEME_PATCHES = [
 OTHER_PATCHES = [
     (APP, "app root",
      "            .background(Palette.background)\n            .ignoresSafeArea()",
-     "            .background(AppBackground())\n            .ignoresSafeArea()"),
+     "            .preferredColorScheme(.dark)\n            .background(AppBackground())\n            .ignoresSafeArea()"),
     (CONV, "conversation page",
      "        .background(Palette.background)\n        .overlay { if blank { hero(model) } }",
      "        .background(AppBackground())\n        .overlay { if blank { hero(model) } }"),
@@ -147,6 +165,58 @@ OTHER_PATCHES = [
      "        .background(Palette.background)\n        .navigationTitle(entry.name)"),
 ]
 
+# 只影响观感、锚点可能随上游漂移：找不到就告警，不阻断构建。
+SOFT_PATCHES = [
+    (THEME, "switch tint", ".tint(.green)", ".tint(Palette.link)"),
+    (THEME, "row hairline", "listRowSeparator(.hidden)",
+     "listRowSeparator(.visible).listRowSeparatorTint(Palette.stroke)"),
+    (SETTINGS, "grouped bg", "Color(.secondarySystemGroupedBackground)", "Palette.grouped"),
+]
+
+COLORS = {
+    "Background": "0B0E13",
+    "Grouped": "141922",
+    "Field": "171D27",
+    "Bubble": "1B2431",
+    "Control": "1E2733",
+    "Stroke": "232B38",
+    "Ink": "E6EDF6",
+    "OnInk": "0B0E13",
+    "TextSecondary": "93A2B8",
+    "TextFaint": "5D6B80",
+    "Link": "5E9BFF",
+    "Spot": "5E9BFF",
+    "AccentColor": "5E9BFF",
+    "StatusRunning": "2DD4BF",
+    "StatusWaiting": "F5B34C",
+    "Scrim": "000000",
+    "DiffAddBackground": "10291B",
+    "DiffAddText": "7DD3A0",
+    "DiffDeleteBackground": "2E171C",
+    "DiffDeleteText": "F08A8A",
+}
+
+
+def apply_palette() -> None:
+    """每个 Color Set 的 light 与 dark 都写成同一套深色，避免亮色模式下漏白。"""
+    for name, hexcolor in COLORS.items():
+        path = V / "Assets.xcassets" / (name + ".colorset") / "Contents.json"
+        if not path.exists():
+            print(f"skin: color set missing {name} (skipped)")
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        comps = {
+            "red": "0x" + hexcolor[0:2],
+            "green": "0x" + hexcolor[2:4],
+            "blue": "0x" + hexcolor[4:6],
+            "alpha": "1.000",
+        }
+        for entry in data.get("colors", []):
+            entry["color"]["color-space"] = "srgb"
+            entry["color"]["components"] = dict(comps)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        print(f"skin: color {name} -> #{hexcolor}")
+
 
 def patch(path: pathlib.Path, label: str, old: str, new: str) -> None:
     if not path.exists():
@@ -161,17 +231,19 @@ def patch(path: pathlib.Path, label: str, old: str, new: str) -> None:
     print(f"skin: {path.name}: {label} patched")
 
 
-COLORS = {'Background': 'F4F5F5', 'Grouped': 'FFFFFF', 'Field': 'FFFFFF', 'Bubble': 'E9EFF3', 'TextSecondary': '5C6872', 'Control': 'E6EBEF', 'Stroke': 'D8DEE2', 'Spot': '426784'}
-
-def apply_palette():
-    import json
-    for name, hexcolor in COLORS.items():
-        path = V / 'Assets.xcassets' / (name + '.colorset') / 'Contents.json'
-        data = json.loads(path.read_bytes())
-        light = next(c for c in data['colors'] if not c.get('appearances'))
-        for offset, key in enumerate(('red', 'green', 'blue')):
-            light['color']['components'][key] = '0x' + hexcolor[offset*2:offset*2+2]
-        path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf8')
+def soft_patch(path: pathlib.Path, label: str, old: str, new: str) -> None:
+    try:
+        if not path.exists():
+            print(f"skin: warn missing {path.name} ({label})")
+            return
+        text = path.read_text(encoding="utf-8")
+        if old not in text:
+            print(f"skin: warn {path.name}: {label} anchor absent (skipped)")
+            return
+        path.write_text(text.replace(old, new), encoding="utf-8")
+        print(f"skin: {path.name}: {label} patched (soft)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"skin: warn {path.name}: {label} failed: {exc}")
 
 
 def main() -> int:
@@ -184,6 +256,9 @@ def main() -> int:
 
     for path, label, old, new in OTHER_PATCHES:
         patch(path, label, old, new)
+
+    for path, label, old, new in SOFT_PATCHES:
+        soft_patch(path, label, old, new)
 
     source = SETTINGS.read_text(encoding="utf-8")
     applied = 0
