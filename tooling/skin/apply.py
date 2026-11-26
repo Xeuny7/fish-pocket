@@ -132,7 +132,7 @@ COLORS = {
     "Grouped": "F8FAFF",
     "Field": "F4F7FE",
     "Control": "E9EDF9",
-    "Stroke": "74809D",
+    "Stroke": "D9E1F2",
     "Bubble": "E7ECFB",
     "Ink": "1D2437",
     "TextSecondary": "505B71",

@@ -639,12 +639,13 @@ private struct CapabilityActionStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.footnote.weight(.medium))
-            .foregroundStyle(filled ? Palette.onInk : Palette.ink)
+            .foregroundStyle(filled ? Palette.ink : Palette.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background {
                 if filled {
-                    Capsule().fill(Palette.ink)
+                    Capsule().fill(Palette.bubble)
+                        .overlay { Capsule().strokeBorder(Palette.link.opacity(0.25)) }
                 } else {
                     Capsule().strokeBorder(Palette.stroke, lineWidth: 1)
                 }

@@ -84,6 +84,8 @@ final class AgentPresetCatalog {
 struct AgentPresetChip: View {
     let sessionId: String
     let catalog: AgentPresetCatalog
+    /// Drawn as a home card instead of a chip, so the blank conversation can offer the presets there.
+    var card = false
     @Environment(AppModel.self) private var app
     @State private var current: String?
     @State private var choosing = false
@@ -94,16 +96,20 @@ struct AgentPresetChip: View {
         Group {
             if !catalog.options.isEmpty && !chosen.isEmpty {
                 Button { choosing = true } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "cpu").foregroundStyle(Palette.secondary)
-                        Text(catalog.name(of: chosen)).foregroundStyle(Palette.ink).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Palette.secondary)
+                    if card {
+                        HomeCardLabel(title: Text("标准模式"), detail: cardDetail, icon: "cpu", tint: Palette.link)
+                    } else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "cpu").foregroundStyle(Palette.secondary)
+                            Text(catalog.name(of: chosen)).foregroundStyle(Palette.ink).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Palette.secondary)
+                        }
+                        .font(.subheadline)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
+                        .background(Palette.field, in: Capsule())
+                        .hitTarget()
                     }
-                    .font(.subheadline)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 36)
-                    .background(Palette.field, in: Capsule())
-                    .hitTarget()
                 }
                 .buttonStyle(.plain)
                 .disabled(catalog.visible.isEmpty)
@@ -121,6 +127,11 @@ struct AgentPresetChip: View {
                 _ = await select(standard)
             }
         }
+    }
+
+    /// What the card says under its name: the mode this conversation would use.
+    private var cardDetail: LocalizedStringKey {
+        "当前：\(catalog.name(of: chosen))，点按切换"
     }
 
     /// A blank session's preset is not in the shared projections until it is touched.

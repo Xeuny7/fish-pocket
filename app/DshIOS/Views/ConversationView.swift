@@ -323,7 +323,7 @@ struct ConversationView: View {
         .overlay { if blank { hero } }
         // Above the composer: the transcript and the ✕ while the bar is held to talk.
         .overlay { VoiceHoldOverlay(voice: model.composer.voice) }
-        .conversationDock {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if let accessory = bot?.accessory { accessory.padding(.bottom, 8) }
                 ComposerStatusBar(
@@ -367,6 +367,7 @@ struct ConversationView: View {
         .skinNavigationBackground()
         .navigationBarTitleDisplayMode(.inline)
         .conversationBar()
+        .toolbarBackground(.hidden, for: .navigationBar)
         // Stated, not left to the default: the workbench's files and changes hide the bar of
         // their own stacks, and without this closing the sheet takes this bar along.
         .toolbar(.visible, for: .navigationBar)
@@ -606,7 +607,6 @@ struct ConversationView: View {
         return ScrollView {
             VStack(spacing: 14) {
                 if showsHeadline { greeting }
-                workspaceControls
                 if !keyboardUp, let shortcuts { shortcutGrid(shortcuts) }
             }
             .padding(.horizontal, 18)
@@ -649,71 +649,54 @@ struct ConversationView: View {
         }
     }
 
+    /// The four cards a blank conversation offers. The workspace and the preset are the page's own
+    /// controls, so they belong here rather than in a chip row above it; the other two are features the
+    /// app already has. Each card says in one line what it does.
     private func shortcutGrid(_ shortcuts: ConversationShortcuts) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
         return LazyVGrid(columns: columns, spacing: 10) {
-            shortcut(Text("工作区"), icon: "folder", tint: Palette.running) { openWorkbench(.files) }
-            shortcut(Text(MiniAppsPage.tabTitle), icon: "square.stack", tint: Palette.link, action: shortcuts.miniApps)
-            shortcut(Text("自动化"), icon: "clock.arrow.2.circlepath", tint: Palette.waiting, action: shortcuts.schedules)
-            shortcut(Text("插件市场"), icon: "puzzlepiece.extension", tint: Palette.link, action: shortcuts.plugins)
+            workspaceCard
+            AgentPresetChip(sessionId: sessionId, catalog: presets, card: true)
+            homeCard(Text("文件"), detail: "查看和改动这个工作区的文件", icon: "folder", tint: Palette.running) { openWorkbench(.files) }
+            homeCard(Text(MiniAppsPage.tabTitle), detail: "打开装好的小应用", icon: "square.stack", tint: Palette.link, action: shortcuts.miniApps)
         }
     }
 
-    private func shortcut(_ title: Text, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+    /// This conversation's workspace, picked from the card itself: the same menu the chip offered.
+    private var workspaceCard: some View {
+        Menu {
+            Section("工作区") {
+                ForEach(app.workspaces) { workspace in
+                    Button { if workspace.id != app.workspace(of: sessionId)?.id { switchWorkspace(workspace) } } label: {
+                        if workspace.id == app.workspace(of: sessionId)?.id { Label(workspace.displayTitle, systemImage: "checkmark") } else { Text(workspace.displayTitle) }
+                    }
+                }
+            }
+            Button { showNewWorkspace = true } label: { Label("添加工作区", systemImage: "folder.badge.plus") }
+        } label: {
+            HomeCardLabel(title: Text("默认工作区"), detail: workspaceCardDetail, icon: "folder", tint: Palette.running)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("工作区：\(app.workspace(of: sessionId)?.displayTitle ?? "")"))
+        .accessibilityHint("选择这次对话使用的工作区")
+    }
+
+    private var workspaceCardDetail: LocalizedStringKey {
+        if let title = app.workspace(of: sessionId)?.displayTitle {
+            "当前：\(title)，点按切换"
+        } else {
+            "选择这次对话使用的文件夹"
+        }
+    }
+
+    private func homeCard(_ title: Text, detail: LocalizedStringKey, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: icon)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 30, height: 30)
-                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                    .accessibilityHidden(true)
-                title
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Palette.ink)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-            .background(Palette.field, in: RoundedRectangle(cornerRadius: 15))
-            .contentShape(RoundedRectangle(cornerRadius: 15))
+            HomeCardLabel(title: title, detail: detail, icon: icon, tint: tint)
         }
         .buttonStyle(.plain)
-    }
-
-    private var workspaceControls: some View {
-            // Side by side while both fit; a narrow window (iPhone Duo closed, Split View) stacks them
-            // instead of folding a name onto two lines.
-            RowOrColumn(spacing: 8) {
-                Menu {
-                    Section("工作区") {
-                        ForEach(app.workspaces) { workspace in
-                            Button { if workspace.id != app.workspace(of: sessionId)?.id { switchWorkspace(workspace) } } label: {
-                                if workspace.id == app.workspace(of: sessionId)?.id { Label(workspace.displayTitle, systemImage: "checkmark") } else { Text(workspace.displayTitle) }
-                            }
-                        }
-                    }
-                    Button { showNewWorkspace = true } label: { Label("添加工作区", systemImage: "folder.badge.plus") }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder").foregroundStyle(Palette.secondary)
-                        Text(app.workspace(of: sessionId)?.displayTitle ?? String(localized: "选择工作区")).foregroundStyle(Palette.ink).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Palette.secondary)
-                    }
-                    .font(.subheadline)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 36)
-                    .background(Palette.field, in: Capsule())
-                    .hitTarget()
-                }
-                .accessibilityLabel(Text("工作区：\(app.workspace(of: sessionId)?.displayTitle ?? "")"))
-                AgentPresetChip(sessionId: sessionId, catalog: presets)
-            }
     }
 
     // MARK: Approvals and questions

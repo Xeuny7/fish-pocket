@@ -61,7 +61,7 @@ struct FishPocketPage: View {
             .frame(maxWidth: .infinity)
         }
         // Under 设置 the page continues the grey of the lists it was opened from.
-        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)
+        .background(AppBackground())
         .actionTray(shown: !account.signedIn || (account.canPurchase && chosen != nil)) {
             if account.signedIn { buyBar } else { signInBar }
         }
@@ -257,7 +257,8 @@ struct FishPocketPage: View {
 }
 
 extension View {
-    /// A surface on the grouped page: white, and in the dark a step up from the near-black page.
+    /// A surface on the grouped page: white, and in the dark a step up from the near-black page. No
+/// outline: on the pale canvas an edge around every card is what reads as a box drawn on the page.
     func cardSurface(selected: Bool = false) -> some View { modifier(CardSurface(selected: selected)) }
 
     /// The page's one action, in a tray that floats over the end of its scroll: the system's
@@ -294,8 +295,8 @@ private struct CardSurface: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         content
-            .background(colorScheme == .dark ? Palette.field : Palette.background, in: shape)
-            .overlay { shape.strokeBorder(selected ? Palette.ink : Palette.stroke.opacity(0.6), lineWidth: selected ? 2 : 1) }
+            .background(colorScheme == .dark ? Palette.field : Palette.grouped, in: shape)
+            .overlay { if selected { shape.strokeBorder(Palette.link.opacity(0.55), lineWidth: 1.5) } }
     }
 }
 

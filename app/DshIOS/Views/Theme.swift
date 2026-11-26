@@ -84,7 +84,8 @@ extension View {
     }
 }
 
-/// A stable fill keeps the outline and text legible when there is little content behind the panel.
+/// A stable fill keeps text legible when there is little content behind the panel. No outline: an
+/// edge around every panel is the boxed look the app moved away from.
 private struct FeaturePanel: View {
     @Environment(\.botSettingsAccent) private var accent
     var cornerRadius: CGFloat = 18
@@ -95,7 +96,6 @@ private struct FeaturePanel: View {
         shape.fill(fill)
             .overlay {
                 if let accent { shape.fill(accent.opacity(0.12)) }
-                shape.strokeBorder(accent ?? Palette.stroke, lineWidth: 1)
             }
             .allowsHitTesting(false)
     }
@@ -145,6 +145,64 @@ struct WindowAppearance: UIViewRepresentable {
             super.didMoveToWindow()
             window?.overrideUserInterfaceStyle = style
         }
+    }
+}
+
+/// A card on a blank conversation's home: an icon, a name, and one line saying what it does.
+struct HomeCardLabel: View {
+    let title: Text
+    let detail: LocalizedStringKey
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                title
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(Palette.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Palette.faint)
+                .padding(.top, 4)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+        .background(Palette.field, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+}
+
+/// One choice in a row of them. The picked pill is a tint of the page's blue: an ink-filled capsule
+/// read as a black block on the pale page, which is what the outlined look was being blamed for.
+struct SelectablePill: View {
+    let title: Text
+    let selected: Bool
+
+    var body: some View {
+        title
+            .font(.subheadline.weight(selected ? .semibold : .regular))
+            .foregroundStyle(selected ? Palette.ink : Palette.secondary)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 34)
+            .background(selected ? Palette.bubble : Palette.control, in: Capsule())
+            .overlay { if selected { Capsule().strokeBorder(Palette.link.opacity(0.25)) } }
+            .contentShape(Capsule())
+            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
@@ -207,7 +265,7 @@ struct AppSwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Toggle(isOn: configuration.$isOn) { configuration.label }
             .toggleStyle(.switch)
-            .tint(.green)
+            .tint(Palette.link)
     }
 }
 
@@ -229,7 +287,7 @@ struct AppSwitch: View {
         Toggle(isOn: $isOn) { label ?? Text("") }
             .labelsHidden()
             .toggleStyle(.switch)
-            .tint(.green)
+            .tint(Palette.link)
     }
 }
 

@@ -67,12 +67,7 @@ struct PluginStoreView: View {
             if tab != value { Haptics.select() }
             tab = value
         } label: {
-            Text(title)
-                .font(.subheadline.weight(tab == value ? .semibold : .medium))
-                .foregroundStyle(tab == value ? Palette.onInk : Palette.secondary)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 36)
-                .background { if tab == value { Capsule().fill(Palette.ink) } }
+            SelectablePill(title: Text(title), selected: tab == value)
                 .hitTarget()
         }
         .buttonStyle(.plain)
@@ -335,16 +330,15 @@ private struct StoreDiscoverPage: View {
     private func rows(_ entries: [StoreEntry], lead: AnyView? = nil) -> some View {
         if wide {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(entries) { row($0).featurePanel(cornerRadius: 22) }
+                ForEach(entries) { row($0) }
             }
             .padding(.horizontal, 16)
         } else {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 10) {
                 if let lead { lead }
                 ForEach(entries) { row($0) }
             }
             .padding(.vertical, 3)
-            .featurePanel(cornerRadius: 22)
             .padding(.horizontal, 16)
         }
     }
@@ -398,12 +392,7 @@ private struct StoreDiscoverPage: View {
             action()
             Task { await market.reload(app) }
         } label: {
-            Text(title)
-                .font(.footnote.weight(selected ? .semibold : .medium))
-                .foregroundStyle(selected ? Palette.onInk : Palette.ink)
-                .padding(.horizontal, 13)
-                .frame(minHeight: 34)
-                .background(selected ? Palette.ink : Palette.control, in: Capsule())
+            SelectablePill(title: Text(title), selected: selected)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
@@ -482,10 +471,9 @@ private struct StoreRow: View {
     private var metadata: JSON { model.market.result?["metadata"] ?? .null }
 
     var body: some View {
-        let layout = wide && !dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(HStackLayout(spacing: 10))
-            : AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-        layout {
+        // One card per plugin, and the install button sits inside that card: it is this plugin's
+        // action, not a row of the same rank as the plugin itself.
+        HStack(alignment: .center, spacing: 10) {
             NavigationLink {
                 StoreEntryDetail(listing: entry, model: model, install: install)
             } label: {
@@ -507,10 +495,10 @@ private struct StoreRow: View {
             .buttonStyle(.plain)
             action
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 12)
-        .padding(.vertical, 6)
-        .frame(minHeight: wide ? 86 : 74)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: wide ? 86 : 74, alignment: .leading)
+        .featurePanel(cornerRadius: 18)
     }
 
     /// The labels the market declares, by title. Some indexes give a plugin half a dozen (what it

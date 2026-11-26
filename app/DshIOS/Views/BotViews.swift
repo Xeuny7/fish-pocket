@@ -317,8 +317,11 @@ struct BotHomeView: View {
                 BotSetupView()
             }
         }
-        .background(Palette.background)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { AppBackground().ignoresSafeArea(.container) }
+        .skinNavigationBackground()
         .navigationTitle("Bot")
+        .toolbarBackground(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let openDrawer { ToolbarItem(placement: .topBarLeading) { DrawerButton(action: openDrawer) } }
@@ -441,6 +444,8 @@ struct BotHomeView: View {
             Section("Bot") {
                 ForEach(botList) { bot in
                     Button { pick(.bot(bot.id)) } label: { botRow(bot) }.buttonStyle(.plain)
+                        .listRowBackground(rowGlass(.bot(bot.id)))
+                        .listRowSeparator(.hidden)
                 }
             }
         }
@@ -448,6 +453,8 @@ struct BotHomeView: View {
             Section("群聊") {
                 ForEach(roomList) { room in
                     Button { pick(.room(room.id)) } label: { roomRow(room) }.buttonStyle(.plain)
+                        .listRowBackground(rowGlass(.room(room.id)))
+                        .listRowSeparator(.hidden)
                 }
             }
         }
@@ -520,7 +527,8 @@ struct BotHomeView: View {
                 if !team.isMain(bot) { hideButton(bot.id, hidden: bot.hidden) }
                 sessionButtons(bot.sessionId)
             }
-            .listRowBackground(pickedFill(.bot(bot.id)))
+            .listRowBackground(rowGlass(.bot(bot.id)))
+            .listRowSeparator(.hidden)
     }
 
     /// A group's row: it can be pinned and hidden.
@@ -535,7 +543,8 @@ struct BotHomeView: View {
                 hideButton(room.id, hidden: room.hidden)
                 sessionButtons(room.sessionId)
             }
-            .listRowBackground(pickedFill(.room(room.id)))
+            .listRowBackground(rowGlass(.room(room.id)))
+            .listRowSeparator(.hidden)
     }
 
     private func botRow(_ bot: BotInfo) -> some View {
@@ -598,13 +607,8 @@ struct BotHomeView: View {
         }
     }
 
-    /// The fill of a row beside the chat: the picked one's mark, clear on the others, as the 会话
-    /// list has it; the list's own (nil) where rows push. Every row beside the chat has one from
-    /// the start: the list keeps up only a background the row had as its cell was made. One that
-    /// first came with the picking was drawn once and left so, and after light turned to dark
-    /// (or back) the picked row stayed light under a name now white.
-    private func pickedFill(_ route: BotRoute) -> Color? {
-        selection.map { $0.wrappedValue == route ? Palette.bubble : .clear }
+    private func rowGlass(_ route: BotRoute) -> some View {
+        BotRowGlass(isSelected: selection?.wrappedValue == route)
     }
 
     @ViewBuilder

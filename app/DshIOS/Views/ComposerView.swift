@@ -436,6 +436,11 @@ struct ComposerView: View {
             // Held, the bar *is* the recording bar: one 54 pt capsule with the waveform in it.
             // The attachments step aside with the text, so the fill stays that capsule instead of
             // growing into a tall black box with a thumbnail stranded in its corner.
+            if voice.phase == .idle, !context.permissionOptions.isEmpty {
+                permissionBar
+                    .padding(.horizontal, 13)
+                    .padding(.top, 6)
+            }
             if voice.phase == .idle {
                 AttachmentRail(composer: composer)
                     .padding(.horizontal, 13)
@@ -509,6 +514,52 @@ struct ComposerView: View {
                     .accessibilityLabel("全屏编辑")
                 }
             }
+    }
+
+    /// 聊天权限 at the field's top left: the mode this conversation's tools run under, marked with a
+    /// warning once it is wider than the workspace. The menu is the list `/permission` offers, and the
+    /// full-access choice keeps going through the confirmation the composer already shows.
+    private var permissionBar: some View {
+        Menu {
+            Section("聊天权限") {
+                ForEach(context.permissionOptions, id: \.value) { option in
+                    Button { choosePermission(option.value) } label: {
+                        Label(Self.permissionTitle(option), systemImage: option.value == currentPermission ? "checkmark" : Self.permissionIcon(option.value))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: permissionIsWide ? "exclamationmark.shield.fill" : "lock.shield")
+                Text(currentPermissionTitle)
+                Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(permissionIsWide ? Palette.waiting : Palette.secondary)
+            .padding(.horizontal, 9)
+            .frame(minHeight: 26)
+            .background(permissionIsWide ? Palette.waiting.opacity(0.14) : Palette.control, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel(Text("聊天权限：\(currentPermissionTitle)"))
+        .accessibilityHint("查看并设置这次对话的权限")
+    }
+
+    /// The engine's own default when a session has not chosen yet.
+    private var currentPermission: String { model.permission ?? "workspace-write" }
+
+    /// Full access and the experimental auto review: the two that reach past the workspace.
+    private var permissionIsWide: Bool { currentPermission == "danger-full-access" || currentPermission == "auto" }
+
+    private var currentPermissionTitle: String {
+        if let option = context.permissionOptions.first(where: { $0.value == currentPermission }) {
+            return Self.permissionName(option)
+        }
+        switch currentPermission {
+        case "danger-full-access": return String(localized: "完全权限")
+        case "auto": return String(localized: "自动审查")
+        default: return String(localized: "工作区内修改")
+        }
     }
 
     /// C-83, shortened: the keyboard's `/` and `@` have the ＋ tray, the queue has its own bar.

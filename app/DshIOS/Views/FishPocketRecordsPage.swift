@@ -30,7 +30,7 @@ struct FishPocketRecordsPage: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
         }
-        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)
+        .background(AppBackground())
         .navigationTitle("积分明细")
         .navigationBarTitleDisplayMode(.inline)
         .task {

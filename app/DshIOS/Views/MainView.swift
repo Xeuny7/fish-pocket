@@ -160,6 +160,7 @@ struct MainView: View {
         // Counted outside this body. Counted here, every change to the session list or to what the
         // Bots are doing would redraw this view, and with it the list and the conversation it builds.
         .background { HomeBadgeCounter(badges: $badges) }
+        .background { AppBackground().ignoresSafeArea(.container) }
         // The drawer and the Bot pages, which have no way to the store themselves.
         .onChange(of: app.pluginStoreRequest) { _, token in
             guard token != nil, scenePhase != .background else { return }
