@@ -245,6 +245,7 @@ struct ComposerView: View {
     /// The draft runs past three lines: long text moves to the full editor.
     @State private var tall = false
     @State private var confirmingPermission: String?
+    @State private var changingPermission = false
     /// The token whose 「全部」 sheet is open.
     @State private var browsing: TriggerHit?
     /// What Return does while the candidate panel is up; the panel keeps it current.
@@ -269,6 +270,9 @@ struct ComposerView: View {
             if let trigger {
                 CandidatePanel(model: model, context: context, hit: trigger, pick: { pick($0, over: trigger) }, showAll: { refocus = true; browsing = trigger },
                                onReturn: { panelReturn = $0 })
+            }
+            if voice.phase == .idle, !context.permissionOptions.isEmpty {
+                permissionBar.padding(.leading, 5)
             }
             field
                 // While held, the bar's own fill over the surface: the waveform's ink, red to cancel.
@@ -436,11 +440,6 @@ struct ComposerView: View {
             // Held, the bar *is* the recording bar: one 54 pt capsule with the waveform in it.
             // The attachments step aside with the text, so the fill stays that capsule instead of
             // growing into a tall black box with a thumbnail stranded in its corner.
-            if voice.phase == .idle, !context.permissionOptions.isEmpty {
-                permissionBar
-                    .padding(.horizontal, 13)
-                    .padding(.top, 6)
-            }
             if voice.phase == .idle {
                 AttachmentRail(composer: composer)
                     .padding(.horizontal, 13)
@@ -521,10 +520,10 @@ struct ComposerView: View {
     /// full-access choice keeps going through the confirmation the composer already shows.
     private var permissionBar: some View {
         Menu {
-            Section("聊天权限") {
+            Section("访问模式") {
                 ForEach(context.permissionOptions, id: \.value) { option in
                     Button { choosePermission(option.value) } label: {
-                        Label(Self.permissionTitle(option), systemImage: option.value == currentPermission ? "checkmark" : Self.permissionIcon(option.value))
+                        Label(Self.permissionTitle(option), systemImage: option.value == model.permission ? "checkmark" : Self.permissionIcon(option.value))
                     }
                 }
             }
@@ -539,27 +538,19 @@ struct ComposerView: View {
             .padding(.horizontal, 9)
             .frame(minHeight: 26)
             .background(permissionIsWide ? Palette.waiting.opacity(0.14) : Palette.control, in: Capsule())
-            .contentShape(Capsule())
+            .hitTarget()
         }
-        .accessibilityLabel(Text("聊天权限：\(currentPermissionTitle)"))
-        .accessibilityHint("查看并设置这次对话的权限")
+        .disabled(changingPermission)
+        .accessibilityLabel(Text("访问模式"))
+        .accessibilityValue(Text(currentPermissionTitle))
     }
 
-    /// The engine's own default when a session has not chosen yet.
-    private var currentPermission: String { model.permission ?? "workspace-write" }
-
-    /// Full access and the experimental auto review: the two that reach past the workspace.
-    private var permissionIsWide: Bool { currentPermission == "danger-full-access" || currentPermission == "auto" }
+    private var permissionIsWide: Bool { model.permission.map(Self.needsConfirmation) ?? false }
 
     private var currentPermissionTitle: String {
-        if let option = context.permissionOptions.first(where: { $0.value == currentPermission }) {
-            return Self.permissionName(option)
-        }
-        switch currentPermission {
-        case "danger-full-access": return String(localized: "完全权限")
-        case "auto": return String(localized: "自动审查")
-        default: return String(localized: "工作区内修改")
-        }
+        guard let value = model.permission else { return String(localized: "访问模式") }
+        let option = context.permissionOptions.first(where: { $0.value == value })
+        return Self.permissionName(option ?? (value: value, name: value))
     }
 
     /// C-83, shortened: the keyboard's `/` and `@` have the ＋ tray, the queue has its own bar.
@@ -930,7 +921,7 @@ struct ComposerView: View {
     // MARK: Permission (C-110)
 
     private func choosePermission(_ value: String) {
-        guard value != model.permission else { return }
+        guard !changingPermission, value != model.permission else { return }
         Haptics.select()
         if Self.needsConfirmation(value) {
             confirmingPermission = value
@@ -945,12 +936,19 @@ struct ComposerView: View {
     }
 
     private func applyPermission(_ value: String) {
+        guard !changingPermission else { return }
+        changingPermission = true
         Task {
+            defer { changingPermission = false }
             do {
-                try await model.executeCommand("/permission \(value)")
-                // A command raises no timeline event that would re-read the mode.
+                let reply = try await model.executeCommand("/permission \(value)")
+                let result = reply["result"]
+                if result["kind"].string != "success" {
+                    app.showToast(result["text"].string ?? String(localized: "指令执行失败"), tone: .warning)
+                    return
+                }
                 model.refreshProjections()
-            } catch { app.showToast(composer.errorText(error)) }
+            } catch { app.showToast(composer.errorText(error), tone: .warning) }
         }
     }
 

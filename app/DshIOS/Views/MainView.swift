@@ -608,7 +608,7 @@ struct MainView: View {
         }
         .environment(\.openSession, OpenSessionAction(openSessionBox) { open(session: $0) })
         .environment(\.conversationShortcuts, ConversationShortcuts(
-            miniApps: openMiniApps, schedules: openSchedules, plugins: openPlugins
+            miniApps: openMiniApps
         ))
     }
 
@@ -844,7 +844,7 @@ struct MainView: View {
         setDrawer(false)
     }
 
-    /// 插件, from the sidebar or the new conversation page.
+    /// 插件, from the sidebar or the store shortcut.
     private func openPlugins() {
         setDrawer(false)
         if usesTabs {
@@ -862,14 +862,6 @@ struct MainView: View {
             tab = .explore
             if explorePath.last != .miniApps { explorePath = [.miniApps] }
         } else { sheet = .miniApps }
-    }
-
-    private func openSchedules() {
-        if usesTabs {
-            sheet = nil
-            tab = .explore
-            if explorePath.last != .schedules { explorePath = [.schedules] }
-        } else { sheet = .schedules }
     }
 
     private func setDrawer(_ open: Bool) {

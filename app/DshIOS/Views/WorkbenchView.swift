@@ -90,10 +90,10 @@ struct WorkbenchView: View {
                         Button { if tab != item { Haptics.select() }; tab = item } label: {
                             Text(item.title)
                                 .font(.subheadline.weight(tab == item ? .semibold : .medium))
-                                .foregroundStyle(tab == item ? Palette.onInk : Palette.secondary)
+                                .foregroundStyle(tab == item ? Palette.ink : Palette.secondary)
                                 .padding(.horizontal, 12)
                                 .frame(minHeight: 36)
-                                .background { if tab == item { Capsule().fill(Palette.ink) } }
+                                .background { if tab == item { Capsule().fill(Palette.bubble) } }
                                 .hitTarget()
                         }
                         .buttonStyle(.plain)

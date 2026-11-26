@@ -102,6 +102,7 @@ struct PluginStoreView: View {
 
 private struct StoreDiscoverPage: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let model: PluginStoreModel
     @Binding var searching: Bool
     let manage: () -> Void
@@ -113,7 +114,7 @@ private struct StoreDiscoverPage: View {
     private var market: PluginMarketModel { model.market }
     private var metadata: JSON { market.result?["metadata"] ?? .null }
     /// Rows sit side by side once two of them fit.
-    private var wide: Bool { width >= 640 }
+    private var wide: Bool { width >= 640 && !dynamicTypeSize.isAccessibilitySize }
     private var hasText: Bool { !market.query.text.trimmingCharacters(in: .whitespaces).isEmpty }
     private var unfiltered: Bool { !hasText && market.query.category == nil && market.query.labels.isEmpty }
 
@@ -191,7 +192,7 @@ private struct StoreDiscoverPage: View {
     }
 
     private var browser: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             searchField
             if let reason = market.failure, market.entries.isEmpty {
                 failure(reason) { await market.reload(app, refresh: true) }
@@ -211,6 +212,7 @@ private struct StoreDiscoverPage: View {
                     }
                     .padding(.bottom, 24)
                 }
+                .clipped()
                 .scrollDismissesKeyboard(.immediately)
                 .refreshable { await market.reload(app, refresh: true) }
             }
@@ -312,8 +314,8 @@ private struct StoreDiscoverPage: View {
             .foregroundStyle(Palette.secondary)
             .frame(maxWidth: .infinity, minHeight: 88)
         } else {
-            if wide { trustLine.padding(.horizontal, 34).padding(.bottom, 10) }
-            rows(market.entries.map(StoreEntry.init), lead: wide ? nil : AnyView(trustLine.padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 6)))
+            trustLine.padding(.horizontal, 28).padding(.bottom, 10)
+            rows(market.entries.map(StoreEntry.init))
             if let failure = market.moreFailure {
                 Text(failure).font(.footnote).foregroundStyle(Palette.removed).padding(.horizontal, 34).padding(.top, 10)
             }
@@ -327,7 +329,7 @@ private struct StoreDiscoverPage: View {
 
     /// One card on a phone; cards side by side where there is room.
     @ViewBuilder
-    private func rows(_ entries: [StoreEntry], lead: AnyView? = nil) -> some View {
+    private func rows(_ entries: [StoreEntry]) -> some View {
         if wide {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(entries) { row($0) }
@@ -335,7 +337,6 @@ private struct StoreDiscoverPage: View {
             .padding(.horizontal, 16)
         } else {
             LazyVStack(alignment: .leading, spacing: 10) {
-                if let lead { lead }
                 ForEach(entries) { row($0) }
             }
             .padding(.vertical, 3)
@@ -471,9 +472,10 @@ private struct StoreRow: View {
     private var metadata: JSON { model.market.result?["metadata"] ?? .null }
 
     var body: some View {
-        // One card per plugin, and the install button sits inside that card: it is this plugin's
-        // action, not a row of the same rank as the plugin itself.
-        HStack(alignment: .center, spacing: 10) {
+        let stack = wide && !dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: 10))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+        return stack {
             NavigationLink {
                 StoreEntryDetail(listing: entry, model: model, install: install)
             } label: {
@@ -493,7 +495,11 @@ private struct StoreRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            action
+            if wide && !dynamicTypeSize.isAccessibilitySize {
+                action
+            } else {
+                action.frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

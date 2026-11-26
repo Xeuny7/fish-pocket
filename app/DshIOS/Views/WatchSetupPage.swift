@@ -108,10 +108,10 @@ struct WatchSetupPage: View {
                 } label: {
                     Text(item.title)
                         .font(.subheadline.weight(channel == item ? .semibold : .medium))
-                        .foregroundStyle(channel == item ? Palette.onInk : Palette.secondary)
+                        .foregroundStyle(channel == item ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 16)
                         .frame(minHeight: 36)
-                        .background { if channel == item { Capsule().fill(Palette.ink) } }
+                        .background { if channel == item { Capsule().fill(Palette.bubble) } }
                         .hitTarget()
                 }
                 .buttonStyle(.plain)

@@ -62,10 +62,10 @@ struct ShareAppPage: View {
                 Button { if style != item { Haptics.select() }; style = item } label: {
                     Text(item.title)
                         .font(.subheadline.weight(style == item ? .semibold : .medium))
-                        .foregroundStyle(style == item ? Palette.onInk : Palette.secondary)
+                        .foregroundStyle(style == item ? Palette.ink : Palette.secondary)
                         .padding(.horizontal, 14)
                         .frame(minHeight: 36)
-                        .background { if style == item { Capsule().fill(Palette.ink) } }
+                        .background { if style == item { Capsule().fill(Palette.bubble) } }
                         .hitTarget()
                 }
                 .buttonStyle(.plain)

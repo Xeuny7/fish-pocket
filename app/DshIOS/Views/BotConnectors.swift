@@ -210,9 +210,9 @@ struct BotConnectorsPage: View {
             withAnimation(.snappy(duration: 0.2)) { action() }
         } label: {
             Text(title).font(.subheadline.weight(picked ? .semibold : .regular))
-                .foregroundStyle(picked ? Palette.onInk : Palette.ink)
+                .foregroundStyle(picked ? Palette.ink : Palette.secondary)
                 .padding(.horizontal, 14).frame(height: 34)
-                .background(picked ? Palette.ink : Palette.control, in: Capsule())
+                .background(picked ? Palette.bubble : Palette.control, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(picked ? .isSelected : [])

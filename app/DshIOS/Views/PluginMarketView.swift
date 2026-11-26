@@ -481,10 +481,10 @@ struct PluginMarketPage: View {
         } label: {
             Text(title)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(selected ? Palette.onInk : Palette.ink)
+                .foregroundStyle(selected ? Palette.ink : Palette.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(selected ? Palette.ink : Palette.control, in: Capsule())
+                .background(selected ? Palette.bubble : Palette.control, in: Capsule())
         }
         .buttonStyle(.plain)
     }

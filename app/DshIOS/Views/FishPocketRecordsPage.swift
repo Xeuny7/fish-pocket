@@ -76,10 +76,10 @@ struct FishPocketRecordsPage: View {
         } label: {
             Text(title)
                 .font(.subheadline.weight(on ? .semibold : .regular))
-                .foregroundStyle(on ? Palette.onInk : Palette.ink)
+                .foregroundStyle(on ? Palette.ink : Palette.secondary)
                 .padding(.horizontal, 18)
                 .frame(height: 34)
-                .background(on ? Palette.ink : Palette.control, in: Capsule())
+                .background(on ? Palette.bubble : Palette.control, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])

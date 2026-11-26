@@ -216,9 +216,9 @@ struct BotScheduleCreateSheet: View {
                 } label: {
                     Text(symbols[day % 7])
                         .font(.subheadline.weight(on ? .semibold : .regular))
-                        .foregroundStyle(on ? Palette.onInk : Palette.ink)
+                        .foregroundStyle(on ? Palette.ink : Palette.secondary)
                         .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(on ? Palette.ink : Palette.control, in: Capsule())
+                        .background(on ? Palette.bubble : Palette.control, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
