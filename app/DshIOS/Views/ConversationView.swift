@@ -1574,17 +1574,28 @@ struct AssistantTurnView: View {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) { choice = !showWork }
                     } label: {
-                        HStack(spacing: 6) {
-                            if inProgress && !ownChat { ProgressView().controlSize(.mini) }
-                            Text(summaryLine).lineLimit(1).truncationMode(.middle)
+                        HStack(spacing: 10) {
+                            if inProgress && !ownChat {
+                                ProgressView().controlSize(.small).tint(Palette.link)
+                            } else {
+                                Image(systemName: "list.bullet").foregroundStyle(Palette.link)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(summaryLine)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                                .lineLimit(2).truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Palette.faint)
+                                .foregroundStyle(Palette.secondary)
                                 .rotationEffect(.degrees(showWork ? 90 : 0))
+                                .accessibilityHidden(true)
                         }
-                        .font(.subheadline)
-                        .foregroundStyle(Palette.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .frame(minHeight: 44)
+                        .featurePanel(cornerRadius: 12)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -1596,8 +1607,8 @@ struct AssistantTurnView: View {
                             }
                             if let bot, bot.showsThinking, let turn, finished { BotThinkingTime(turn: turn) }
                         }
-                        .padding(.leading, 12)
-                        .overlay(alignment: .leading) { Rectangle().fill(Palette.stroke).frame(width: 2) }
+                        .padding(.leading, 8)
+                        .overlay(alignment: .leading) { Capsule().fill(Palette.link.opacity(0.30)).frame(width: 2) }
                     }
                 }
                 // Pictures the turn made are what it was for: they stay out when its work folds away.
@@ -1815,7 +1826,10 @@ private struct ReasoningView: View {
         Button {
             actions.present(.reasoning(id: id, text: text))
         } label: {
-            WorkRowLabel(systemImage: "lightbulb", text: summary.isEmpty ? String(localized: "思考") : summary)
+            WorkRowLabel(
+                systemImage: "lightbulb", text: String(localized: "思考"), tint: Palette.link,
+                busy: live, detail: summary.isEmpty ? nil : summary, highlighted: true
+            )
         }
         .buttonStyle(.plain)
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12, style: .continuous))

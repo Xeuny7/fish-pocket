@@ -594,25 +594,37 @@ struct WebSearchCard: View {
     var body: some View {
         let sources = meta["sources"].array
         let answer = meta["answer"].string ?? ""
-        VStack(alignment: .leading, spacing: 10) {
-            if answer.isEmpty && sources.isEmpty { Text("未找到结果").font(.caption).foregroundStyle(Palette.secondary) }
+        VStack(alignment: .leading, spacing: 12) {
+            if answer.isEmpty && sources.isEmpty {
+                Label("未找到结果", systemImage: "magnifyingglass")
+                    .font(.footnote).foregroundStyle(Palette.secondary)
+            }
             if !answer.isEmpty { MarkdownView(text: answer) }
             ForEach(Array(sources.enumerated()), id: \.offset) { index, source in
-                VStack(alignment: .leading, spacing: 2) {
-                    let url = source["url"].string ?? ""
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(index + 1).").font(.caption.monospacedDigit()).foregroundStyle(Palette.faint)
-                        if let link = URL(string: url), link.scheme?.hasPrefix("http") == true {
+                let url = source["url"].string ?? ""
+                let title = source["title"].string.flatMap { $0.isEmpty ? nil : $0 } ?? url
+                let link = URL(string: url)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(index + 1, format: .number)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Palette.running)
+                    VStack(alignment: .leading, spacing: 5) {
+                        if let link, link.scheme == "https" || link.scheme == "http" {
                             Link(destination: link) {
-                                Text(source["title"].string ?? url).font(.footnote).foregroundStyle(Palette.ink).underline().lineLimit(2)
+                                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.link).underline()
                             }
                         } else {
-                            Text(source["title"].string ?? url).font(.footnote).lineLimit(2)
+                            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                         }
+                        if let host = link?.host { Text(host).font(.caption).foregroundStyle(Palette.secondary) }
+                        if let snippet = source["snippet"].string { Text(snippet).font(.footnote).foregroundStyle(Palette.secondary) }
+                        if let date = source["publishedAt"].string { Text(date).font(.caption).foregroundStyle(Palette.secondary) }
                     }
-                    if let snippet = source["snippet"].string { Text(snippet).font(.caption).foregroundStyle(Palette.secondary).lineLimit(3) }
-                    if let date = source["publishedAt"].string { Text(date).font(.caption2).foregroundStyle(Palette.faint) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(12)
+                .featurePanel(cornerRadius: 12)
             }
             if meta["truncated"].bool == true { Text("来源列表已截断").font(.caption).foregroundStyle(Palette.secondary) }
         }

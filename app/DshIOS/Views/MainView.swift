@@ -1,7 +1,7 @@
 import StoreKit
 import SwiftUI
 
-/// The root. From iOS 18 the system's adaptable tab bar in every width: 会话, Bot, 应用, 探索 and 设置,
+/// The root. From iOS 18 the system's adaptable tab bar in every width: 会话, Bot, Mini Apps and 探索,
 /// at the bottom on a phone, at the top or as a sidebar where there is room (iPad, iPhone Duo open).
 /// The 会话 tab pushes a conversation over its list where it is narrow and keeps one beside it where it
 /// is wide. On an iPhone before iOS 18 the same tabs, on the tab bar of that time (always at the
@@ -10,7 +10,7 @@ import SwiftUI
 /// narrow a drawer that slides in from the left.
 struct MainView: View {
     /// The phone's tabs.
-    enum HomeTab: Hashable { case sessions, bot, explore }
+    enum HomeTab: Hashable { case sessions, bot, miniApps, explore }
 
     enum Sheet: String, Identifiable { case settings, plugins, store, schedules, signIn, cordis, share, watch, capabilities, connectors, phoneControl, remote, fishPocket, deepSeekAccount, miniApps, imageGen, shortcuts; var id: String { rawValue } }
 
@@ -68,11 +68,10 @@ struct MainView: View {
     @State private var newsShown = false
     /// 「在电脑上新建会话」, once whatever sheet asked for it has gone.
     @State private var remoteTarget: RemoteSessionTarget?
-    /// The launch has gone back to the page the app was last on (`place`); from then on the page
-    /// in front is kept for the next launch. A window opened on a session stays on it.
-    @State private var placeRestored: Bool
-    /// The launch went back to a Bot page: the blank conversation made under it does not take its place.
-    @State private var launchedUnderBot = false
+    @State private var didOpenHome: Bool
+    @State private var navigationRevision = UUID()
+    @State private var followingLink: UUID?
+    @State private var waitingForNewSession: UUID?
 
     /// A `fishpocket://` link this window received (`RootView`), until it is followed.
     @Binding private var link: LinkRequest?
@@ -81,50 +80,8 @@ struct MainView: View {
     init(session: String? = nil, link: Binding<LinkRequest?> = .constant(nil)) {
         _selection = State(initialValue: session)
         _sessionsPath = State(initialValue: session.map { [.session($0)] } ?? [])
-        _placeRestored = State(initialValue: session != nil)
+        _didOpenHome = State(initialValue: session != nil)
         _link = link
-    }
-
-    private static let placeKey = "dsh.lastPlace"
-
-    /// The page in front, as it is kept for the next launch: a conversation, the Bot list, a
-    /// Bot's chat or a group.
-    private var place: String? {
-        // On the tab bar only 会话 and Bot are kept: from the other tabs the next launch goes back
-        // to whichever of the two was last in front.
-        if usesTabs, tab != .sessions, tab != .bot { return nil }
-        // On the tab bar the list with nothing pushed is a place too: the next launch stays there.
-        guard botOpen else { return selection.map { "session:\($0)" } ?? (usesTabs ? "sessions" : nil) }
-        switch botPath.last {
-        case .bot(let id)?: return "bot:\(id)"
-        case .room(let id)?: return "room:\(id)"
-        case nil: return "bots"
-        }
-    }
-
-    /// Back to the page the app was last on, when it is still there; a link or a notification
-    /// that opened the app has already picked its own.
-    private func restorePlace() {
-        guard selection == nil, let kept = UserDefaults.standard.string(forKey: Self.placeKey) else { return }
-        let parts = kept.split(separator: ":", maxSplits: 1).map(String.init)
-        let id = parts.count > 1 ? parts[1] : ""
-        switch parts[0] {
-        case "session":
-            // A session on a computer is taken on trust while signed in: its page says so if it has gone.
-            // A Bot's own session is its chat's, not a conversation to put back.
-            if RemoteStore.sessionId(of: id) != nil ? app.remote.signedIn : app.workspace(of: id).map({ !isTeamWorkspace($0) }) == true && !app.isArchived(id) { selection = id }
-        case "bot": openBots([.bot(id)])
-        case "room": openBots([.room(id)])
-        case "bots": openBots([])
-        default: break
-        }
-    }
-
-    private func openBots(_ path: [BotRoute]) {
-        launchedUnderBot = true
-        botOpen = true
-        if usesTabs { tab = .bot }
-        botPath = path
     }
 
     /// The credential sheets (`settings.onboarding`'s steps). Unlike the web they never open by
@@ -145,7 +102,7 @@ struct MainView: View {
     /// team's, which holds the Bots' sessions alone (a blank one there would be reused: a Bot's chat).
     private var workspace: Workspace? {
         let usable = app.workspaces.filter { !isTeamWorkspace($0) }
-        return usable.first { $0.id == workspaceId } ?? usable.first { $0.title == "default-workspace" } ?? usable.first ?? app.workspaces.first
+        return usable.first { $0.id == workspaceId } ?? usable.first { $0.title == "default-workspace" } ?? usable.first
     }
 
     /// The Bot team's workspace: by the team's word once it answers, before that (the launch races the
@@ -265,8 +222,17 @@ struct MainView: View {
         // The Live Activity and the widgets; a cold launch keeps the link until this view is up.
         .onChange(of: link?.token, initial: true) {
             guard let request = link else { return }
+            let revision = UUID()
+            navigationRevision = revision
+            followingLink = revision
             link = nil
-            Task { await follow(request.link) }
+            Task {
+                await follow(request.link)
+                if followingLink == revision {
+                    followingLink = nil
+                    launched()
+                }
+            }
         }
         .onChange(of: workspaceId) { WidgetSnapshotWriter.shared.refresh() }
         .onAppear { settledWidth = sizeClass }
@@ -277,6 +243,7 @@ struct MainView: View {
         // tab is not on screen: what finishes there meanwhile is marked unread, and the watch told.
         .onChange(of: tab) { _, tab in
             guard usesTabs else { return }
+            if tab != .sessions { navigationRevision = UUID() }
             botOpen = tab == .bot
             app.currentSession = shownSession
         }
@@ -297,13 +264,10 @@ struct MainView: View {
         .inkTint()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .focusedSceneValue(\.windowCommands, windowCommands)
-        .task(id: app.workspaces.map(\.id)) { launched() }
-        .onChange(of: place) { _, place in
-            if placeRestored, let place { UserDefaults.standard.set(place, forKey: Self.placeKey) }
-        }
+        .task(id: workspace?.id) { launched() }
         // Which store this copy came from: only an App Store install is asked for a rating.
         .task { await AppDistribution.refresh() }
-        // The sidebar's Mini Apps row; with the tab bar the page is a row of 探索.
+        // The sidebar and shortcuts use the same Mini Apps destination.
         .onChange(of: app.miniAppsRequest) { _, token in
             guard token != nil, scenePhase != .background else { return }
             app.miniAppsRequest = nil
@@ -356,16 +320,17 @@ struct MainView: View {
         .onChange(of: onScreen, initial: true) { _, session in ReadAloud.shared.scope = session }
         .onChange(of: shownBotChat, initial: true) { _, chat in app.botTeam.visibleChat = chat }
         .onChange(of: selection) { _, id in
+            if id != nil { navigationRevision = UUID() }
             app.currentSession = shownSession
             if usesTabs {
                 showInTabs(id)
                 return
             }
-            if launchedUnderBot { launchedUnderBot = false } else { botOpen = false }
             if let id {
+                botOpen = false
                 remember(workspaceOf: id)
-            } else {
-                newConversation(in: workspace)
+            } else if canOpenLocalConversation {
+                newConversation(in: workspace, automatic: true)
             }
         }
         // An archived current session leaves the main view (here, the drawer, a follow push).
@@ -373,7 +338,7 @@ struct MainView: View {
             if let selection, archived.contains(selection) { self.selection = nil }
         }
         // `app.open(session:)`: toasts, the subagent catalog, schedules…
-        .onChange(of: app.openRequest?.token) { _, token in
+        .onChange(of: app.openRequest?.token, initial: true) { _, token in
             guard token != nil, scenePhase != .background, let id = app.openRequest?.id else { return }
             app.openRequest = nil
             // Asked for over a sheet (a toast there): the sheet goes, or the session opens unseen behind it.
@@ -383,23 +348,28 @@ struct MainView: View {
             if usesTabs { showInTabs(id) }
             setDrawer(false)
         }
-        .onChange(of: app.newSessionRequest?.token) { _, token in
+        .onChange(of: app.newSessionRequest?.token, initial: true) { _, token in
             guard token != nil, scenePhase != .background, let request = app.newSessionRequest else { return }
+            navigationRevision = UUID()
+            didOpenHome = true
+            waitingForNewSession = request.token
             app.newSessionRequest = nil
             sheet = nil
             storeOpen = false
             // The conversation shows in place of the Bot pages too. The engine may hand back the
             // blank conversation already selected, and then no change of selection closes them.
             botOpen = false
-            launchedUnderBot = false
             setDrawer(false)
             Task {
                 // As a link does: a request made as the app comes up (one typed in the Mini Apps bar)
                 // waits for the workspaces and the launch's own blank conversation, not dropped.
                 let deadline = ContinuousClock.now + .seconds(10)
-                while app.workspaces.isEmpty || creating, ContinuousClock.now < deadline {
+                while waitingForNewSession == request.token, app.workspaces.isEmpty || creating,
+                      ContinuousClock.now < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
+                guard waitingForNewSession == request.token else { return }
+                defer { waitingForNewSession = nil }
                 let target = request.workspaceId.flatMap { id in app.workspaces.first { $0.id == id } } ?? workspace
                 if let target { workspaceId = target.id }
                 newConversation(in: target, agentPreset: request.agentPreset, draft: request.draft, prompt: request.prompt)
@@ -415,26 +385,18 @@ struct MainView: View {
         #endif
     }
 
-    /// The workspaces are known, and with them which sessions there are: back to the page the
-    /// app was last on, or a blank conversation.
+    /// An ordinary launch opens a local blank conversation; a requested route keeps priority.
     private func launched() {
-        guard !app.workspaces.isEmpty else { return }
-        if !placeRestored {
-            placeRestored = true
-            restorePlace()
-            // On the tab bar someone with no conversation yet has nothing to see in the list: the
-            // new conversation page is where they start. Back from it is the (empty) list.
-            if usesTabs, selection == nil, tab == .sessions, !hasConversations { newConversation(in: workspace) }
-        }
-        if selection == nil, !usesTabs { newConversation(in: workspace) }
+        guard !didOpenHome, let workspace, link == nil, followingLink == nil else { return }
+        didOpenHome = true
+        if canOpenLocalConversation { newConversation(in: workspace, automatic: true) }
     }
 
-    /// Any conversation of the user's, archived ones and those on a computer included; the Bots' are not.
-    private var hasConversations: Bool {
-        if app.remote.signedIn { return true }
-        let team = app.botTeam.teamWorkspaceId
-        return app.workspaces.contains { $0.id != team && !app.sessions(in: $0, includeArchived: true).isEmpty }
-            || !app.sessions(in: nil, includeArchived: true).isEmpty
+    private var canOpenLocalConversation: Bool {
+        selection == nil && tab == .sessions && !botOpen && !storeOpen && sheet == nil && !webOpen
+            && link == nil && followingLink == nil && app.openRequest == nil
+            && app.newSessionRequest == nil && waitingForNewSession == nil
+            && app.botTeam.openRequest == nil && app.miniAppsRequest == nil
     }
 
     /// The conversation the user is looking at (`AppModel.currentSession`): on the tab bar, only
@@ -479,7 +441,6 @@ struct MainView: View {
             return
         }
         remember(workspaceOf: id)
-        launchedUnderBot = false
         tab = .sessions
         if sessionsPath.last != .session(id) { sessionsPath = [.session(id)] }
     }
@@ -846,13 +807,16 @@ struct MainView: View {
         } else if layoutWidth == .regular { storeOpen = true } else { sheet = .store }
     }
 
-    /// Mini Apps: a page of 探索 with the tab bar, a sheet over the iPad's sidebar before iOS 18.
+    /// Mini Apps has its own tab and remains available from Explore.
     private func openMiniApps() {
         if usesTabs {
             sheet = nil
-            tab = .explore
-            if explorePath.last != .miniApps { explorePath = [.miniApps] }
+            tab = .miniApps
         } else { sheet = .miniApps }
+    }
+
+    private var miniAppsTab: some View {
+        NavigationStack { MiniAppsPage() }
     }
 
     private func setDrawer(_ open: Bool) {
@@ -899,6 +863,11 @@ struct MainView: View {
                 tabLabel(Text(verbatim: "Bot"), "fp.bot", custom: true)
             }
             .badge(badges.botPending)
+            Tab(value: HomeTab.miniApps) {
+                miniAppsTab
+            } label: {
+                tabLabel(Text(MiniAppsPage.tabTitle), "square.stack")
+            }
             Tab(value: HomeTab.explore) {
                 ExploreTabView(path: $explorePath)
             } label: {
@@ -928,6 +897,9 @@ struct MainView: View {
                 .tabItem { tabLabel(Text(verbatim: "Bot"), "fp.bot", custom: true) }
                 .tag(HomeTab.bot)
                 .badge(badges.botPending)
+            miniAppsTab
+                .tabItem { tabLabel(Text(MiniAppsPage.tabTitle), "square.stack") }
+                .tag(HomeTab.miniApps)
             ExploreTabView(path: $explorePath)
                 .tabItem { tabLabel(Text("探索"), "square.grid.2x2") }
                 .tag(HomeTab.explore)
@@ -976,8 +948,8 @@ struct MainView: View {
         // gone until the next launch, and on iPhone Duo it came back put away.
         .environment(\.horizontalSizeClass, .regular)
         // Only while this tab is in front: a conversation archived from another one does not pull it here.
-        .task(id: selection == nil && !app.workspaces.isEmpty && tab == .sessions) {
-            if selection == nil, !app.workspaces.isEmpty, tab == .sessions { newConversation(in: workspace) }
+        .task(id: didOpenHome && canOpenLocalConversation) {
+            if didOpenHome, canOpenLocalConversation { newConversation(in: workspace, automatic: true) }
         }
     }
 
@@ -1166,7 +1138,7 @@ struct MainView: View {
     }
 
     /// `fishpocket://session/<id>` opens the session; `fishpocket://new` a new conversation with the keyboard up,
-    /// once the workspaces are known and the launch's own blank conversation is in place.
+    /// once the workspaces are known and any session creation already underway has finished.
     private func follow(_ link: DshLink) async {
         // Taken already (by another window, or found waiting as the app came to the front): nothing to do.
         var shared: ShareInbox.Taken?
@@ -1280,7 +1252,6 @@ struct MainView: View {
         while app.workspaces.isEmpty || creating, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(100))
         }
-        launchedUnderBot = false
         botOpen = false
         newConversation(in: workspace, draft: shared.text, files: files, focus: true)
     }
@@ -1293,8 +1264,9 @@ struct MainView: View {
     }
 
     /// Open a blank conversation in `workspace` (the engine reuses a blank one there).
-    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false) {
+    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false, automatic: Bool = false) {
         guard let workspace, !creating else { return }
+        let revision = navigationRevision
         creating = true
         Task {
             defer { creating = false }
@@ -1308,6 +1280,7 @@ struct MainView: View {
                 // the session list (`createSession` refreshes it): the path holds the conversation and
                 // the list stays on screen, so 新对话 seemed to do nothing. A turn later it is shown.
                 if #unavailable(iOS 18) { try? await Task.sleep(for: .milliseconds(30)) }
+                if automatic, revision != navigationRevision || !canOpenLocalConversation { return }
                 selection = id
                 // The engine may hand back the blank conversation already selected: shown all the same.
                 if usesTabs { showInTabs(id) }

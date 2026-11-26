@@ -15,17 +15,21 @@ struct ToolCallView: View {
         let ask = call.displayName == "ask_user_question" ? AskStatus(call: call, model: model) : nil
         let state = ask?.state ?? row.state
         let outcome = row.outcome(state)
+        let icon = ToolStyle.icon(for: call.name)
+        let isWeb = icon == "globe" || icon == "arrow.down.doc"
         HStack(spacing: 8) {
             Button {
                 actions.present(.tool(call))
             } label: {
                 WorkRowLabel(
-                    systemImage: ToolStyle.icon(for: call.name),
-                    text: line(row, ask: ask, outcome: outcome),
+                    systemImage: icon,
+                    text: isWeb ? row.title : line(row, ask: ask, outcome: outcome),
                     truncation: row.showsPath ? .middle : .tail,
-                    tint: state == .error ? Palette.removed : state == .stopped ? Palette.waiting : Palette.secondary,
+                    tint: state == .error ? Palette.removed : state == .stopped ? Palette.waiting : isWeb ? Palette.running : Palette.secondary,
                     outcome: outcome,
-                    busy: state == .preparing || state == .running
+                    busy: state == .preparing || state == .running,
+                    detail: isWeb && row.subjectOrTitle != row.title ? row.subjectOrTitle : nil,
+                    highlighted: isWeb
                 )
             }
             .buttonStyle(.plain)
@@ -75,8 +79,7 @@ struct ToolCallView: View {
     }
 }
 
-/// A line of the turn's work: icon, one line of words, how it ended, and the chevron of
-/// something that opens. Tool calls and reasoning look the same.
+/// A turn activity label, with an optional preview and a distinct icon for reasoning and web work.
 struct WorkRowLabel: View {
     let systemImage: String
     let text: String
@@ -84,19 +87,39 @@ struct WorkRowLabel: View {
     var tint: Color = Palette.secondary
     var outcome: String?
     var busy = false
+    var detail: String?
+    var highlighted = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage).frame(width: 20).foregroundStyle(tint)
-            Text(text).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(truncation)
-            Spacer(minLength: 0)
-            if let outcome { Text(outcome).font(.footnote.weight(.medium)).foregroundStyle(tint).fixedSize() }
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(highlighted ? tint.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(text)
+                    .font(.subheadline.weight(highlighted ? .semibold : .regular))
+                    .foregroundStyle(highlighted ? Palette.ink : Palette.secondary)
+                    .lineLimit(highlighted ? 2 : 1)
+                    .truncationMode(truncation)
+                if let detail {
+                    Text(detail).font(.footnote).foregroundStyle(Palette.secondary)
+                        .lineLimit(2).truncationMode(truncation)
+                }
+                if let outcome { Text(outcome).font(.footnote.weight(.medium)).foregroundStyle(tint) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
             if busy { ProgressView().controlSize(.mini) }
             Image(systemName: "chevron.right")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Palette.faint)
+                .accessibilityHidden(true)
         }
-        .font(.subheadline)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
@@ -214,7 +237,7 @@ struct ToolDetailSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .modifier(LinkOpening())
             }
-            .background(Palette.background)
+            .featurePage()
             .navigationTitle(ToolStyle.name(of: call))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -43,7 +43,6 @@ private struct SettingsSheet: View {
 
 private struct SettingsList: View {
     @Environment(AppModel.self) private var app
-    @EnvironmentObject private var engine: NodeEngine
     @Environment(\.openSession) private var openSession
     @State private var defaultModel: String?
     @State private var pluginCount: Int?
@@ -52,6 +51,7 @@ private struct SettingsList: View {
     /// What new sessions start with until the user picks: the setting's value is empty then.
     @State private var catalogDefaultPermission = ""
     @State private var confirmingFullAccess = false
+    @State private var savingSettings: Set<String> = []
     @AppStorage(BackgroundKeeper.enabledKey) private var keepAlive = true
     @State private var confirmingKeepAliveOff = false
     @State private var languageChoice = AppLanguage.chosen ?? "system"
@@ -63,29 +63,14 @@ private struct SettingsList: View {
 
     private var mirror: SettingsMirror { app.settings }
 
-    private var engineRunning: Bool {
-        if case .running = engine.phase { return true }
-        return false
-    }
-
     var body: some View {
         List {
-            if !engineRunning {
-                Section { EngineCard() }
-                .groupedRow()
+            Section {
+                EngineCard(version: engineVersion)
+            } header: {
+                Text("引擎")
             }
-
-            // Pushed from the 探索 tab, these two are on that page.
-            if !pushed {
-                Section {
-                    NavigationLink { ShareAppPage() } label: { ShareAppRow() }
-                    // iPad pairs with no watch.
-                    if WCSession.isSupported() {
-                        NavigationLink { WatchSetupPage() } label: { WatchSetupRow() }
-                    }
-                }
-                .groupedRow()
-            }
+            .settingsRows()
 
             // The ways to reach a model, each on its own: Fish Pocket credits (when this build
             // has the service), the DeepSeek account, an API key.
@@ -97,10 +82,8 @@ private struct SettingsList: View {
                             : String(localized: "未登录"))
                     }
                 }
-                if !pushed {
-                    NavigationLink { AccountPage() } label: {
-                        row("DeepSeek 账号", "person.crop.circle", app.account.signedIn ? (app.account.displayName ?? String(localized: "已登录")) : String(localized: "未登录"))
-                    }
+                NavigationLink { AccountPage() } label: {
+                    row("DeepSeek 账号", "person.crop.circle", app.account.signedIn ? (app.account.displayName ?? String(localized: "已登录")) : String(localized: "未登录"))
                 }
                 DeepSeekKeyRow()
             } header: {
@@ -108,19 +91,17 @@ private struct SettingsList: View {
             } footer: {
                 if !pushed { Text("几种方式相互独立，配置任意一种就能开始对话。") }
             }
-            .groupedRow()
+            .settingsRows()
 
-            if !pushed || mirror.serves("permission") {
-                Section {
-                    if !pushed {
-                        NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
-                    }
-                    if mirror.serves("permission") { permissionPicker }
-                } header: {
-                    Text(pushed ? LocalizedStringKey("权限") : LocalizedStringKey("模型与权限"))
-                }
-                .groupedRow()
+            Section {
+                NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
+                if mirror.serves("permission") { permissionPicker }
+            } header: {
+                Text("模型与权限")
+            } footer: {
+                if savingSettings.contains("permission") { settingsSaving }
             }
+            .settingsRows()
 
             Section {
                 NavigationLink { VoiceInputSettingsPage() } label: {
@@ -135,7 +116,6 @@ private struct SettingsList: View {
                 NavigationLink { VoiceMessageSettingsPage() } label: {
                     row("语音消息", "message.badge.waveform", VoiceMessageSettings.shared.summary)
                 }
-                // dsh-image-gen, built into the engine: shown once the engine serves its settings.
                 if mirror.serves(ImageGenModel.namespace) {
                     NavigationLink { ImageGenSettingsPage() } label: {
                         let value = mirror.namespace(ImageGenModel.namespace)?["value"] ?? .null
@@ -145,24 +125,29 @@ private struct SettingsList: View {
             } header: {
                 Text("声音与图像")
             }
-            .groupedRow()
+            .settingsRows()
 
             if !pushed {
                 Section {
                     NavigationLink { PluginsView() } label: {
                         row("插件", "puzzlepiece.extension", pluginCount.map { String(localized: "\($0) 个") } ?? "")
                     }
+                } header: {
+                    Text("扩展智能体")
                 }
-                .groupedRow()
+                .settingsRows()
 
                 Section {
                     NavigationLink { SchedulesView(openSession: openSession.map { open in { open($0) } }) } label: {
                         row("自动化", "clock.arrow.2.circlepath", app.scheduleCount.map { String(localized: "\($0) 个") } ?? "")
                     }
+                    if WCSession.isSupported() {
+                        NavigationLink { WatchSetupPage() } label: { WatchSetupRow() }
+                    }
                 } header: {
                     Text("设备").foregroundStyle(Palette.secondary)
                 }
-                .groupedRow()
+                .settingsRows()
             }
 
             Section {
@@ -170,18 +155,18 @@ private struct SettingsList: View {
                 Toggle(isOn: Binding(get: { keepAlive }, set: { on in
                     if on { keepAlive = true } else { confirmingKeepAliveOff = true }
                 })) {
-                    Label("静音音频", systemImage: "speaker.slash")
+                    SettingsRowLabel("静音音频", icon: "speaker.slash")
                 }
                 // The system's continued-processing task exists from iOS 26 only.
                 if #available(iOS 26.0, *) {
-                    Toggle(isOn: $continuedProcessing) { Label("任务续跑", systemImage: "hourglass") }
+                    Toggle(isOn: $continuedProcessing) { SettingsRowLabel("任务续跑", icon: "hourglass") }
                 }
             } header: {
                 Text("后台运行")
             } footer: {
                 Text(backgroundFooter)
             }
-            .groupedRow()
+            .settingsRows()
             .onChange(of: keepAlive) { BackgroundKeeper.shared.settingsChanged() }
             .onChange(of: continuedProcessing) { BackgroundKeeper.shared.settingsChanged() }
             .alert("关闭静音音频？", isPresented: $confirmingKeepAliveOff) {
@@ -192,13 +177,13 @@ private struct SettingsList: View {
             }
 
             Section {
-                Toggle(isOn: $widgetTitles) { Label("显示会话标题", systemImage: "eye") }
+                Toggle(isOn: $widgetTitles) { SettingsRowLabel("显示会话标题", icon: "eye") }
             } header: {
                 Text("小组件")
             } footer: {
                 Text("关掉后，主屏幕和锁屏小组件只显示数量和状态。设备锁定时，标题总会被打码。")
             }
-            .groupedRow()
+            .settingsRows()
             .onChange(of: widgetTitles) { WidgetSnapshotWriter.shared.refresh() }
 
             Section {
@@ -210,9 +195,10 @@ private struct SettingsList: View {
                         Text("浅色").tag("light")
                         Text("深色").tag("dark")
                     } label: {
-                        Label("外观", systemImage: "circle.lefthalf.filled")
+                        SettingsRowLabel("外观", icon: "circle.lefthalf.filled")
                     }
                     .pickerValueTint()
+                    .disabled(savingSettings.contains("ui-theme"))
                 }
                 if AppIconChoice.available {
                     NavigationLink { AppIconPage() } label: { AppIconRow() }
@@ -223,7 +209,7 @@ private struct SettingsList: View {
                     Text("跟随系统").tag("system")
                     ForEach(AppLanguage.choices, id: \.code) { Text(verbatim: $0.name).tag($0.code) }
                 } label: {
-                    Label("语言", systemImage: "globe")
+                    SettingsRowLabel("语言", icon: "globe")
                 }
                 .pickerValueTint()
                 .onChange(of: languageChoice) { _, value in
@@ -232,25 +218,24 @@ private struct SettingsList: View {
                 }
             } header: {
                 Text("显示与语言")
+            } footer: {
+                if savingSettings.contains("ui-theme") { settingsSaving }
             }
-            .groupedRow()
+            .settingsRows()
 
             Section {
                 NavigationLink { AdvancedSettingsPage() } label: { row("高级", "wrench.and.screwdriver") }
                 NavigationLink { AboutPage(engineVersion: engineVersion) } label: { row("关于", "info.circle", aboutValue) }
-            } header: {
-                Text("维护")
-            }
-            .groupedRow()
-
-            // Out of the sessions list: a tap there is to open a conversation, and an archived one does not open.
-            Section {
+                // An archived conversation must be restored before it can open.
                 NavigationLink { DrawerView.archive() } label: {
                     let count = DrawerView.archivedCount(app)
                     row("已归档会话", "archivebox", count > 0 ? "\(count)" : "")
                 }
+                if !pushed { NavigationLink { ShareAppPage() } label: { ShareAppRow() } }
+            } header: {
+                Text("维护")
             }
-            .groupedRow()
+            .settingsRows()
 
             // On the 探索 tab when there is one; an iPad before iOS 18 has 设置 as a sheet and no such tab.
             if !pushed { SupportLinksSection() }
@@ -258,6 +243,7 @@ private struct SettingsList: View {
         }
         .groupedList()
         .navigationTitle("设置")
+        .contentMargins(.bottom, pushed ? 32 : 16, for: .scrollContent)
         .navigationBarTitleDisplayMode(pushed ? .inline : .large)
         .alert("重启 App 后生效", isPresented: $languageChanged) {
             Button("好", role: .cancel) {}
@@ -272,7 +258,7 @@ private struct SettingsList: View {
         }
         .followSettings()
         .task { await load() }
-        .task(id: app.settingsRevision) { if !pushed { await loadDerived() } }
+        .task(id: app.settingsRevision) { await loadDerived() }
         .task(id: app.revision("permission-presets/catalog-changed")) { await loadPermissions() }
     }
 
@@ -290,13 +276,14 @@ private struct SettingsList: View {
     }
 
     private func row(_ title: LocalizedStringKey, _ icon: String, _ value: String = "") -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: icon)
-            if !value.isEmpty {
-                Text(value).font(.footnote).foregroundStyle(Palette.secondary)
-            }
+        SettingsRowLabel(title, icon: icon, value: value)
+    }
+
+    private var settingsSaving: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small).accessibilityHidden(true)
+            Text("保存中…").font(.footnote).foregroundStyle(Palette.secondary)
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// G-01: the permission new sessions start with; full access asks first.
@@ -313,9 +300,10 @@ private struct SettingsList: View {
                 Text(current).tag(current)
             }
         } label: {
-            Label("默认访问模式", systemImage: "lock.shield")
+            SettingsRowLabel("默认访问模式", icon: "lock.shield")
         }
         .pickerValueTint()
+        .disabled(savingSettings.contains("permission"))
     }
 
     /// 任务续跑 is on and available (BackgroundKeeper's continued task needs iOS 26).
@@ -366,6 +354,8 @@ private struct SettingsList: View {
     }
 
     private func write(_ ns: String, _ path: [String], _ value: JSON) async {
+        guard savingSettings.insert(ns).inserted else { return }
+        defer { savingSettings.remove(ns) }
         do {
             let updated = try await mirror.set(ns, path, value)
             if ns == "ui-theme" {
@@ -379,6 +369,71 @@ private struct SettingsList: View {
             Haptics.error()
             app.showToast(describeFailure(error), duration: 5)
         }
+    }
+}
+
+private extension View {
+    func settingsRows() -> some View {
+        listRowBackground(Palette.grouped)
+            .listRowSeparatorTint(Palette.stroke.opacity(0.45))
+    }
+}
+
+struct SettingsRowLabel: View {
+    let title: LocalizedStringKey
+    let icon: String
+    let value: String
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(_ title: LocalizedStringKey, icon: String, value: String = "") {
+        self.title = title
+        self.icon = icon
+        self.value = value
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundStyle(Palette.secondary)
+                .frame(width: 27, height: 27)
+                .background(Palette.control, in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+            if value.isEmpty {
+                titleText
+            } else if typeSize.isAccessibilitySize {
+                stacked
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        titleText.fixedSize()
+                        Spacer(minLength: 0)
+                        valueText.fixedSize()
+                    }
+                    stacked
+                }
+            }
+        }
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + 37 }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var titleText: some View {
+        Text(title).font(.body).foregroundStyle(Palette.ink)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var valueText: some View {
+        Text(value).font(.footnote).foregroundStyle(Palette.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            titleText
+            valueText
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -636,16 +691,19 @@ enum InAppSafari {
 /// Status dot, uptime and memory of the in-process engine.
 private struct EngineCard: View {
     @EnvironmentObject private var engine: NodeEngine
+    var version: String? = nil
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             HStack(spacing: 14) {
                 if case .running = engine.phase { StatusDot(state: .running, size: 8, halo: true) }
-                else { Circle().fill(Palette.faint).frame(width: 8, height: 8) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.callout.weight(.semibold))
-                    Text(detail(now: context.date)).font(.footnote).foregroundStyle(Palette.secondary)
+                else { Circle().fill(statusColor).frame(width: 8, height: 8) }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.callout.weight(.semibold)).foregroundStyle(Palette.ink)
+                    let details = detail(now: context.date)
+                    if !details.isEmpty { Text(details).font(.footnote).foregroundStyle(Palette.secondary) }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
             .accessibilityElement(children: .combine)
@@ -661,8 +719,17 @@ private struct EngineCard: View {
         }
     }
 
+    private var statusColor: Color {
+        switch engine.phase {
+        case .starting: Palette.waiting
+        case .running: Palette.running
+        case .exited, .unsupported: Palette.removed
+        }
+    }
+
     private func detail(now: Date) -> String {
         var parts: [String] = []
+        if let version { parts.append("v\(version)") }
         if case .running = engine.phase, let since = engine.runningSince {
             let uptime = Duration.seconds(max(60, now.timeIntervalSince(since)))
             parts.append(String(localized: "已运行 \(uptime.formatted(.units(allowed: [.days, .hours, .minutes], width: .narrow, maximumUnitCount: 2)))"))

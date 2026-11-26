@@ -285,11 +285,7 @@ struct DeepSeekKeyRow: View {
             draft = ""
             editing = true
         } label: {
-            LabeledContent {
-                Text(keySet ? "已设置" : "未设置").lineLimit(1)
-            } label: {
-                Label("API Key", systemImage: "key")
-            }
+            SettingsRowLabel("API Key", icon: "key", value: keySet ? String(localized: "已设置") : String(localized: "未设置"))
         }
         .task(id: app.revision("credentials/reference-updated")) { await load() }
         .alert("DeepSeek API Key", isPresented: $editing) {
