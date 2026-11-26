@@ -97,7 +97,7 @@ struct AgentPresetChip: View {
             if !catalog.options.isEmpty && !chosen.isEmpty {
                 Button { choosing = true } label: {
                     if card {
-                        HomeCardLabel(title: Text("标准模式"), detail: cardDetail, icon: "cpu", tint: Palette.link)
+                        HomeCardLabel(title: Text("标准模式"), detail: cardDetail, icon: "cpu", tint: Palette.link, chevron: true)
                     } else {
                         HStack(spacing: 8) {
                             Image(systemName: "cpu").foregroundStyle(Palette.secondary)

@@ -154,6 +154,8 @@ struct HomeCardLabel: View {
     let detail: LocalizedStringKey
     let icon: String
     let tint: Color
+    /// True for the two cards that open a menu (the workspace and the preset); the rest navigate.
+    var chevron = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -174,10 +176,12 @@ struct HomeCardLabel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.down")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(Palette.faint)
-                .padding(.top, 4)
+            if chevron {
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Palette.faint)
+                    .padding(.top, 4)
+            }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 10)

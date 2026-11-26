@@ -674,7 +674,7 @@ struct ConversationView: View {
             }
             Button { showNewWorkspace = true } label: { Label("添加工作区", systemImage: "folder.badge.plus") }
         } label: {
-            HomeCardLabel(title: Text("默认工作区"), detail: workspaceCardDetail, icon: "folder", tint: Palette.running)
+            HomeCardLabel(title: Text("默认工作区"), detail: workspaceCardDetail, icon: "folder", tint: Palette.running, chevron: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text("工作区：\(app.workspace(of: sessionId)?.displayTitle ?? "")"))
