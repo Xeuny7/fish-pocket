@@ -257,6 +257,10 @@ struct ExitStatus {
 }
 
 extension ToolCall {
+    var permissionDenied: Bool {
+        isError && (autoReviewDenied || errorCode == "APPROVAL_REJECTED" || errorCode == "SANDBOX_DENIED" || errorCode == "PERMISSION_DENIED")
+    }
+
     var autoReviewDenied: Bool { isError && errorName == "AutoReviewDeniedError" && errorCode == "AUTO_REVIEW_DENIED" }
 
     /// Trimmed and on one line; nil when blank.

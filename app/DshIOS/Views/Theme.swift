@@ -367,23 +367,17 @@ extension View {
         }
     }
 
-    /// A conversation's top bar. From iOS 26 it is the system's see-through bar: the messages
-    /// run up under its buttons, sharp, and blur only under the status bar, above them, so the
-    /// clock stays readable; the bottom edge, under the composer, softens as before. Before, a
-    /// bar in the page colour.
+    /// Let the system fade the transcript underneath the glass navigation controls.
     @ViewBuilder
     func conversationBar() -> some View {
         if #available(iOS 26.0, *) {
-            scrollEdgeEffectStyle(.soft, for: .bottom)
-                .scrollEdgeEffectHidden(true, for: .top)
-                .overlay(alignment: .top) { StatusBarSoftening() }
+            scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
         } else {
             toolbarBackground(Palette.background, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 
-    /// A conversation's title in the bar. From iOS 26 the bar is see-through with no blur at the
-    /// top, so the title sits on glass, as the bar's buttons do, to stay readable over the messages.
     @ViewBuilder
     func barTitleGlass() -> some View {
         if #available(iOS 26.0, *) {
@@ -643,41 +637,6 @@ struct DrawerButton: View {
                 .frame(width: 22, height: 22)
         }
         .accessibilityLabel("打开侧边栏")
-    }
-}
-
-/// A blur under the system status bar alone, fading out above the bar's own buttons: what scrolls
-/// up there stays out of the clock's way, while the messages under the title stay sharp.
-private struct StatusBarSoftening: View {
-    /// The conversation reaches the top of the window, where the status bar is. A column that
-    /// starts lower has none over it (an iPad's, under the floating tab bar; a sheet's): there
-    /// the blur showed as a lighter band of its own, behind the tab bar and beside a list with none.
-    @State private var underStatusBar = false
-
-    var body: some View {
-        // The window's top inset is the status bar (or the Dynamic Island's band); this view's own
-        // inset also holds the navigation bar, which is left clear.
-        let height = Self.statusBarHeight
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .overlay(Palette.background.opacity(0.35))
-            .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.6), .init(color: .clear, location: 1)],
-                                 startPoint: .top, endPoint: .bottom))
-            .frame(height: height + 10)
-            .frame(maxWidth: .infinity, alignment: .top)
-            // Read here, inside: outside `ignoresSafeArea` the frame is the safe area's, below the bars.
-            .onGeometryChange(for: Bool.self) { $0.frame(in: .global).minY < 1 } action: { underStatusBar = $0 }
-            .ignoresSafeArea(edges: .top)
-            .opacity(underStatusBar ? 1 : 0)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
-    @MainActor
-    private static var statusBarHeight: CGFloat {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? scenes.first?.windows.first
-        return window?.safeAreaInsets.top ?? 54
     }
 }
 

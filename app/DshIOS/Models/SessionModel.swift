@@ -41,6 +41,7 @@ final class SessionModel {
     private(set) var queued: [(id: String, text: String)] = []
     private(set) var modelSelection: (provider: String, model: String, effort: String?)?
     private(set) var permission: String?
+    private(set) var changingPermission = false
     private(set) var tokens: (input: Int, output: Int, cacheRead: Int) = (0, 0, 0)
     private(set) var contextWindow: Int?
     private(set) var contextTokens: Int?
@@ -73,6 +74,7 @@ final class SessionModel {
     @ObservationIgnored private var cursor = -1
     @ObservationIgnored private var followTask: Task<Void, Never>?
     @ObservationIgnored private var projectionTask: Task<Void, Never>?
+    @ObservationIgnored private var permissionRevision = 0
     @ObservationIgnored private var liveAttempt: String?
     @ObservationIgnored private var livePartials: [Int: (kind: String, text: String, toolId: String?, toolName: String?)] = [:]
     /// Pending publish of `live`: chunks arrive per token, the view redraws at most this often.
@@ -111,6 +113,7 @@ final class SessionModel {
         followTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 do {
+                    let revision = self.permissionRevision
                     let stream = self.app.mux.open("session/follow", [
                         "request": [
                             "address": self.subagentAddress ?? ["kind": "session", "sessionId": .string(self.sessionId)],
@@ -121,7 +124,7 @@ final class SessionModel {
                     ])
                     for try await frame in stream {
                         await self.app.arrivalLanded()
-                        self.apply(frame)
+                        self.apply(frame, permissionRevision: revision)
                     }
                 } catch {
                     if Task.isCancelled { return }
@@ -145,7 +148,7 @@ final class SessionModel {
         waitTimers = [:]
     }
 
-    private func apply(_ frame: JSON) {
+    private func apply(_ frame: JSON, permissionRevision revision: Int) {
         switch frame["type"].string {
         case "snapshot":
             events = frame["records"].array.map { $0["event"] }
@@ -156,7 +159,7 @@ final class SessionModel {
             // A long turn's start can lie before the window: the session list still knows it runs.
             refold(running: app.sessions[sessionId]?.running ?? false)
             cursor = frame["cursor"].int ?? -1
-            applyProjections(frame["projections"]["values"])
+            applyProjections(frame["projections"]["values"], permissionRevision: revision)
             resetLive()
             snapshotThrough = timeline.items.reduce(0) { last, item in if case .user(let seq, _, _, _) = item { max(last, seq) } else { last } }
             publishTimeline()
@@ -198,6 +201,7 @@ final class SessionModel {
                 default: break
                 }
             }
+            if event["type"].string == "command/done" { refreshProjections() }
             switch event["type"].string {
             case "turn/end", "session/title", "tool/result", "user/message", "turn/start":
                 refreshProjections()
@@ -369,11 +373,13 @@ final class SessionModel {
 
     func refreshProjections() {
         projectionTask?.cancel()
+        let revision = permissionRevision
         projectionTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard let self, !Task.isCancelled else { return }
             if let value = try? await self.client.call("session/projections", ["request": ["sessionId": .string(self.sessionId)]]) {
-                self.applyProjections(value["values"])
+                guard !Task.isCancelled else { return }
+                self.applyProjections(value["values"], permissionRevision: revision)
             }
         }
     }
@@ -387,7 +393,7 @@ final class SessionModel {
         return held.value
     }
 
-    private func applyProjections(_ values: JSON) {
+    private func applyProjections(_ values: JSON, permissionRevision revision: Int) {
         // This runs after every event of a turn and most of what it reads is the same each time.
         // Setting an observed property to an equal value redraws nothing, so the plain writes below
         // cost nothing; the tuples and the in-place removal cannot be compared that way, and check
@@ -418,14 +424,19 @@ final class SessionModel {
             let next = (provider, model, selection["reasoningEffort"].string)
             if modelSelection.map({ $0 == next }) != true { modelSelection = next }
         }
-        permission = values["permissions"]["currentValue"].string ?? permission
+        if !changingPermission, revision == permissionRevision {
+            permission = values["permissions"]["currentValue"].string ?? permission
+        }
         let usage = values["tokenUsage"]
         let used = ((usage["uncachedInputTokens"].int ?? 0) + (usage["cacheReadTokens"].int ?? 0), usage["outputTokens"].int ?? 0, usage["cacheReadTokens"].int ?? 0)
         if tokens != used { tokens = used }
         contextWindow = values["contextPressure"]["contextWindow"].int ?? contextWindow
         contextTokens = values["contextPressure"]["projectedTokens"].int ?? values["contextPressure"]["pressureTokens"].int ?? contextTokens
         workingDirectory = values["workingDirectory"].string ?? workingDirectory
-        let waiting = values["inbox"]["next-turn"].array.filter { $0["source"]["kind"].string != "user-question-reply" }.map { item in
+        let waiting = values["inbox"]["next-turn"].array.filter {
+            let kind = $0["source"]["kind"].string
+            return kind != "user-question-reply" && kind != "user-approval"
+        }.map { item in
             (id: item["itemId"].string ?? item["id"].string ?? UUID().uuidString,
              text: item["content"].array.compactMap { $0["text"].string }.joined(separator: "\n"))
         }
@@ -701,6 +712,26 @@ final class SessionModel {
     @discardableResult
     func executeCommand(_ line: String, attachments: [JSON] = []) async throws -> JSON {
         try await client.call("commands/execute", ["agentId": .string(sessionId), "line": .string(line), "submittedAttachments": .array(attachments)])
+    }
+
+    /// The engine applies the permission before acknowledging the command. Keep the last
+    /// confirmed value on screen and serialize changes across views of this session.
+    func changePermission(_ value: String) async throws {
+        guard !changingPermission, value != permission else { return }
+        changingPermission = true
+        permissionRevision += 1
+        projectionTask?.cancel()
+        defer {
+            permissionRevision += 1
+            changingPermission = false
+            refreshProjections()
+        }
+        let reply = try await executeCommand("/permission \(value)")
+        let result = reply["result"]
+        guard result["kind"].string == "success" else {
+            throw EngineError(code: nil, message: result["text"].string ?? String(localized: "指令执行失败"), detail: result)
+        }
+        permission = value
     }
 
     /// Where a fork "from here" cuts: the end of `turn`, if it has ended.

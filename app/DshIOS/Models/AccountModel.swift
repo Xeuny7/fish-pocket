@@ -315,6 +315,14 @@ final class AccountModel {
     }
 }
 
+func formattedWalletAmounts(_ wallets: [JSON]) -> String? {
+    let amounts = wallets.compactMap { wallet -> String? in
+        guard let amount = wallet["balance"].string, !amount.isEmpty else { return nil }
+        return formatBalance(amount, currency: wallet["currency"].string)
+    }
+    return amounts.isEmpty ? nil : amounts.joined(separator: " + ")
+}
+
 /// Platform Web's balance text: two decimals rounded down, grouped digits, and
 /// sub-cent amounts shown as `<¥0.01` (`-¥0.01` when negative).
 func formatBalance(_ amount: String, currency: String?) -> String {

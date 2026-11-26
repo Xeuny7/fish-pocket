@@ -34,6 +34,7 @@ final class ComposerContext {
     private(set) var catalogDefault: (provider: String, model: String, effort: String?)?
     private(set) var catalogLoaded = false
     private(set) var catalogLoading = false
+    private(set) var permissionDetails: [String: String] = [:]
     private(set) var permissionOptions: [(value: String, name: String)] = []
     /// `ui-conversation.busyEnter` (C-141): what Send does while the agent runs; steer unless set to queue.
     private(set) var busyEnter = "steer"
@@ -88,6 +89,17 @@ final class ComposerContext {
 
     func loadPermissions(_ model: SessionModel) async {
         if let value = try? await model.client.call("permissionPresets/catalog") {
+            permissionDetails = [:]
+            for option in value["options"].array {
+                guard let id = option["value"].string else { continue }
+                switch id {
+                case "read-only": permissionDetails[id] = String(localized: "可读取文件，不能写入更改。")
+                case "workspace-write": permissionDetails[id] = String(localized: "可编辑当前工作区的文件。")
+                case "danger-full-access": permissionDetails[id] = String(localized: "可访问工作区以外的文件。")
+                case "auto": permissionDetails[id] = String(localized: "由自动审查决定是否允许工具操作。")
+                default: permissionDetails[id] = option["description"].string
+                }
+            }
             permissionOptions = value["options"].array.map { ($0["value"].string ?? "", $0["name"].string ?? "") }
         }
     }

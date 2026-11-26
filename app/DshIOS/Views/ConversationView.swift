@@ -37,6 +37,7 @@ struct ConversationView: View {
     @State private var fullBrowser: BrowserModel?
     /// Interactions swiped away; they stay answerable from the 「等你允许」 line.
     @State private var deferred: Set<String> = []
+    @State private var showPermissions = false
     @State private var showNewWorkspace = false
     @State private var showDeepSeekImport = false
     @State private var jobs = JobsModel()
@@ -321,6 +322,12 @@ struct ConversationView: View {
             }
         }
         .overlay { if blank { hero } }
+        .overlay {
+            if bot == nil, model.subagentAddress == nil, presentedInteractionId(model) == nil {
+                DeskPetLayer(model: model, reserveActivityCorner: !blank && hasTools,
+                             reserveScrollCorner: !blank && !atBottom, keyboardUp: keyboardUp)
+            }
+        }
         // Above the composer: the transcript and the ✕ while the bar is held to talk.
         .overlay { VoiceHoldOverlay(voice: model.composer.voice) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -337,7 +344,7 @@ struct ConversationView: View {
                     SubagentReadOnlyNotice(title: notice.title, detail: notice.detail)
                 } else {
                     ComposerView(
-                        model: model, context: context, pendingDraft: app.pendingDrafts[sessionId],
+                        model: model, context: context, showPermissions: $showPermissions, pendingDraft: app.pendingDrafts[sessionId],
                         consumeDraft: { app.pendingDrafts[sessionId] = nil },
                         pendingFiles: app.pendingFiles[sessionId],
                         consumeFiles: { app.pendingFiles[sessionId] = nil },
@@ -367,7 +374,6 @@ struct ConversationView: View {
         .skinNavigationBackground()
         .navigationBarTitleDisplayMode(.inline)
         .conversationBar()
-        .toolbarBackground(.hidden, for: .navigationBar)
         // Stated, not left to the default: the workbench's files and changes hide the bar of
         // their own stacks, and without this closing the sheet takes this bar along.
         .toolbar(.visible, for: .navigationBar)
@@ -453,6 +459,7 @@ struct ConversationView: View {
                 Task { await app.fork(session: sessionId, atSeq: model.forkBoundary(turn: turn), from: .turn) }
             },
             quote: quoteAction(model),
+            reviewPermissions: context.permissionOptions.isEmpty || model.subagentReadOnly(parentAvailable: parentAvailable(model)) != nil || presentedInteractionId(model) != nil ? nil : { showPermissions = true },
             revealQuestion: { deferred.remove("q-\($0)") },
             present: { item in
                 // The timeline stays usable behind an approval: what is waiting steps aside, one tap away.
@@ -960,6 +967,7 @@ struct ConversationActions: Equatable {
         /// Quote text into the composer (`MessageQuotes`); nil where nothing can be sent (a read-only child).
         var quote: ((String) -> Void)?
         /// Bring a question swiped away back up, from its tool row.
+        var reviewPermissions: (() -> Void)?
         var revealQuestion: (String) -> Void = { _ in }
         /// Open what a row holds in the conversation's sheet.
         var present: (TimelineDetail) -> Void = { _ in }
@@ -973,6 +981,7 @@ struct ConversationActions: Equatable {
     /// What a row draws differently for: whether it offers 「引用」 and 「分享为图片」.
     private let quotes: Bool
     private let shares: Bool
+    private let reviewsPermissions: Bool
 
     /// No conversation around: nothing to ask of it. Every such value shares one box, so
     /// the environment's default is the same value each time it is read.
@@ -980,6 +989,7 @@ struct ConversationActions: Equatable {
         box = Self.unset
         quotes = false
         shares = false
+        reviewsPermissions = false
     }
 
     private static let unset = Box()
@@ -990,11 +1000,12 @@ struct ConversationActions: Equatable {
         self.box = box
         quotes = handlers.quote != nil
         shares = handlers.shareImage != nil
+        reviewsPermissions = handlers.reviewPermissions != nil
     }
 
     subscript<Value>(dynamicMember keyPath: KeyPath<Handlers, Value>) -> Value { box.handlers[keyPath: keyPath] }
 
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.box === rhs.box && lhs.quotes == rhs.quotes && lhs.shares == rhs.shares }
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.box === rhs.box && lhs.quotes == rhs.quotes && lhs.shares == rhs.shares && lhs.reviewsPermissions == rhs.reviewsPermissions }
 }
 
 /// Which round the share sheet starts with: a reply's, or (nil) all of them.
@@ -1541,6 +1552,7 @@ struct AssistantTurnView: View {
     var info: TurnInfo?
     /// nil until the reader taps the line; then their choice holds for this turn.
     @State private var choice: Bool?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var landed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.conversationActions) private var actions
@@ -1552,13 +1564,12 @@ struct AssistantTurnView: View {
     @Environment(\.fileLinkScope) private var linkScope
 
     private var stayOpen: Bool {
-        inProgress || info?.steered == true || ["aborted", "interrupted", "error"].contains(info?.closedKind ?? "")
+        info?.steered == true || ["aborted", "interrupted", "error"].contains(info?.closedKind ?? "")
     }
 
     var body: some View {
         let finalStart = finalAnswerStart
         let finished = !inProgress && endedAt != nil
-        let showWork = choice ?? stayOpen
         let ownChat = if case .bot? = botChat { true } else { false }
         // A Bot's answer still arrives whole. Its live activity and any card waiting for the
         // user can appear as the turn runs.
@@ -1576,10 +1587,17 @@ struct AssistantTurnView: View {
             guard botActivityOnly else { return true }
             switch block {
             case .reasoning: return true
-            case .tool(let call): return [.webSearch, .webFetch].contains(StepKind(tool: call.name))
+            case .tool(let call):
+                if call.permissionDenied { return true }
+                return !BotTurnEvents.cards.contains(call.displayName) && !ImageGenCard.handles(call) && !VoiceMessageBubble.handles(call)
             default: return false
             }
         }
+        let hasDenial = work.contains { _, block in
+            if case .tool(let call) = block { return call.permissionDenied }
+            return false
+        }
+        let showWork = choice ?? (stayOpen || hasDenial)
         let leadingWork = botActivityOnly ? !work.isEmpty
             : !botReply && (finalStart > 0 || (inProgress && (blocks.isEmpty || liveCount == 0)))
         if tailShown || leadingWork {
@@ -1595,10 +1613,10 @@ struct AssistantTurnView: View {
                                 Image(systemName: activityIcon).foregroundStyle(activityTint)
                                     .accessibilityHidden(true)
                             }
-                            Text(summaryLine(last: work.last, visibleBlocks: botActivityOnly ? work.map(\.element) : blocks))
+                            Text(summaryLine(work.map(\.element)))
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(activityTint)
-                                .lineLimit(2).truncationMode(.tail)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1).truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
@@ -1757,23 +1775,29 @@ struct AssistantTurnView: View {
         }
     }
 
-    private func summaryLine(last: (offset: Int, element: AssistantBlock)?, visibleBlocks: [AssistantBlock]) -> String {
-        if inProgress {
-            if let last, case .tool(let call) = last.element, !call.finished {
-                let kind = StepKind(tool: call.name)
-                let streaming = isLive(last.offset)
-                return [streaming ? kind.preparing : kind.running, call.summary].filter { !$0.isEmpty }.joined(separator: " · ")
-            }
-            if let last, case .reasoning(_, let text) = last.element, isLive(last.offset) {
-                let summary = ReasoningSummary.make(text, live: true)
-                if !summary.isEmpty { return summary }
-            }
-            return StepKind.thinking.running
+    private func summaryLine(_ work: [AssistantBlock]) -> String {
+        let calls = work.compactMap { block -> ToolCall? in
+            if case .tool(let call) = block { return call }
+            return nil
         }
-        let calls = visibleBlocks.compactMap { block -> ToolCall? in
-            guard case .tool(let call) = block, !VoiceMessageBubble.handles(call) else { return nil }
-            return call
+        if inProgress, let pending = calls.last(where: { !$0.finished }) {
+            let kind = StepKind(tool: pending.name)
+            return blocks.suffix(liveCount).contains(where: { $0.id == "tool-\(pending.id)" }) ? kind.preparing : kind.running
         }
+        if !inProgress, ["aborted", "interrupted", "error"].contains(info?.closedKind ?? ""), let closedLabel {
+            return closedLabel
+        }
+        if let last = calls.last, last.isError { return ToolStyle.name(of: last) + " · " + String(localized: "处理失败") }
+        if inProgress, case .reasoning? = work.last { return StepKind.thinking.running }
+        let links = calls.filter { !$0.isError && $0.finished && StepKind(tool: $0.name) == .webSearch }
+            .flatMap { $0.meta["sources"].array }.compactMap { source -> URL? in
+                guard let text = source["url"].string, let url = URL(string: text),
+                      let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme), url.host != nil else { return nil }
+                return url
+            }
+        let count = Set(links).count
+        if count > 0 { return String(localized: "已找到 \(count) 个来源") }
+        if inProgress { return calls.last.map { StepKind(tool: $0.name).done } ?? StepKind.thinking.running }
         return [StepKind.title(calls: calls), closedLabel].compactMap { $0 }.joined(separator: " · ")
     }
 

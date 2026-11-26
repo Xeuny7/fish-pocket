@@ -329,7 +329,8 @@ final class ComposerModel {
     private func inboxRows(_ lane: String) -> [QueueRow] {
         let inTranscript = Set(pending.filter { $0.placement == .transcript }.map(\.id))
         return projection("inbox")[lane].array.compactMap { item in
-            if item["source"]["kind"].string == "user-question-reply" { return nil }
+            let kind = item["source"]["kind"].string
+            if kind == "user-question-reply" || kind == "user-approval" { return nil }
             if let rpc = item["source"]["rpcId"].string, inTranscript.contains(rpc) { return nil }
             let content = item["content"].array
             let texts = content.filter { $0["type"].string == "text" }.compactMap { $0["text"].string }

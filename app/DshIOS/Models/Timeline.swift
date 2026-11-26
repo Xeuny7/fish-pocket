@@ -622,6 +622,7 @@ struct TimelineBuilder {
     /// `/compact` runs replaced by their compaction card; their `command/done` adds nothing.
     private var replacedCommands: Set<String> = []
     private var commandOutcomes: [String: String] = [:]
+    private var pendingPermissionCommands: Set<String> = []
     private var nextTurnInbox = InboxState()
     private var nextStepInbox = InboxState()
     private var currentStep: Int?
@@ -706,7 +707,13 @@ struct TimelineBuilder {
             return settleRetries(turn: data["turn"].int)
         case "command/run":
             let id = data["commandId"].string ?? "\(seq)"
-            items.append(.command(CommandRun(id: id, name: data["name"].string ?? String(localized: "指令"))))
+            let name = data["name"].string ?? String(localized: "指令")
+            if name == "permission", let args = data["args"].string,
+               !args.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pendingPermissionCommands.insert(id)
+                return false
+            }
+            items.append(.command(CommandRun(id: id, name: name)))
             return true
         case "command/done":
             return applyCommandDone(data, seq: seq)
@@ -724,7 +731,7 @@ struct TimelineBuilder {
         let source = data["source"]
         let kind = source["kind"].string
         let id = data["id"].string
-        if kind == "compact-checkpoint" { return false }
+        if kind == "compact-checkpoint" || kind == "user-approval" { return false }
         // Replacements rewrite earlier history for the model; they are not new input.
         if !surfaceOp.isNull, surfaceOp.string != "append" { return false }
         if kind == "user-question-reply" {
@@ -923,6 +930,11 @@ struct TimelineBuilder {
         let failed = data["kind"].string == "error"
         let text = data["text"].string
         if let text { commandOutcomes[id] = text }
+        if pendingPermissionCommands.remove(id) != nil {
+            guard failed else { return false }
+            items.append(.notice(seq: seq, text: text ?? String(localized: "指令执行失败"), isError: true))
+            return true
+        }
         if replacedCommands.contains(id) {
             guard let index = items.lastIndex(where: { if case .compaction = $0 { return true }; return false }),
                   case .compaction(var card) = items[index], card.outcome == nil, let text else { return false }

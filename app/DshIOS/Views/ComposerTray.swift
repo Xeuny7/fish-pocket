@@ -125,6 +125,7 @@ struct ComposerTray: View {
                     Label("访问模式", systemImage: ComposerView.permissionIcon(model.permission ?? ""))
                 }
                 .pickerStyle(.menu)
+                .disabled(model.changingPermission)
             }
         }
         .groupedRow()

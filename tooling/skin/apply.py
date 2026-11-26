@@ -107,10 +107,6 @@ OTHER_PATCHES = [
     (CONV, "conversation footer",
      "        .conversationDock {\n            VStack(alignment: .leading, spacing: 0)",
      "        .safeAreaInset(edge: .bottom, spacing: 0) {\n            VStack(alignment: .leading, spacing: 0)"),
-    (CONV, "conversation navigation background",
-     "        .conversationBar()\n        // Stated, not left to the default:",
-     "        .conversationBar()\n        .toolbarBackground(.hidden, for: .navigationBar)\n"
-     "        // Stated, not left to the default:"),
     (RECORDS, "records page",
      "        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)",
      "        .background(AppBackground())"),

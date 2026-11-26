@@ -35,6 +35,11 @@ struct ToolCallView: View {
             .buttonStyle(.plain)
             .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12, style: .continuous))
             .contextMenu { menu(row) }
+            if call.permissionDenied, let review = actions.reviewPermissions {
+                Button("查看权限", action: review)
+                    .font(.footnote.weight(.medium)).foregroundStyle(Palette.link)
+                    .frame(minHeight: 44)
+            }
             if call.displayName == "browser" {
                 // What the agent did in the browser is easier to see than to read about.
                 Button { actions.openBrowser() } label: {

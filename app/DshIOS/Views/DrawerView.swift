@@ -75,6 +75,7 @@ struct DrawerView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var removingWorkspace: Workspace?
     @State private var showNewWorkspace = false
+    @State private var showDeskPet = false
 
     private static let ungrouped = ""
     private static let baseRows = 5
@@ -106,6 +107,7 @@ struct DrawerView: View {
             Text("文件夹和会话都会保留，会话移到「未分组」。")
         }
         .sheet(isPresented: $showNewWorkspace) { NewWorkspaceView() }
+        .sheet(isPresented: $showDeskPet) { SheetStack { DeskPetSettingsPage() } }
     }
 
     private var sidebar: some View {
@@ -116,6 +118,7 @@ struct DrawerView: View {
                     .plainRow()
                 pluginsRow
                 miniAppsRow
+                deskPetRow
                 phoneControlRow
                 connectorsRow
                 webRow
@@ -418,6 +421,22 @@ struct DrawerView: View {
         .padding(.bottom, 2)
         .plainRow()
         .task { miniApps.refresh() }
+    }
+
+    private var deskPetRow: some View {
+        Button { Haptics.tap(); showDeskPet = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "pawprint").font(.callout).frame(width: 22)
+                Text("桌宠").font(.subheadline)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Palette.ink)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 46)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .plainRow()
     }
 
     /// 操控手机: the agent taps and reads other apps through iCTRL, which the user installs

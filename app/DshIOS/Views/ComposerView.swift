@@ -210,6 +210,7 @@ struct ModelSearchSheet: View {
 struct ComposerView: View {
     let model: SessionModel
     let context: ComposerContext
+    @Binding var showPermissions: Bool
     /// Text the shell put here (创建你的插件…): added to the draft, not sent.
     var pendingDraft: String?
     var consumeDraft: () -> Void = {}
@@ -239,13 +240,11 @@ struct ComposerView: View {
     @State private var showCamera = false
     @State private var showFiles = false
     @State private var showModels = false
-    @State private var showPermissions = false
     @State private var showTray = false
     @State private var showEditor = false
     /// The draft runs past three lines: long text moves to the full editor.
     @State private var tall = false
     @State private var confirmingPermission: String?
-    @State private var changingPermission = false
     /// The token whose 「全部」 sheet is open.
     @State private var browsing: TriggerHit?
     /// What Return does while the candidate panel is up; the panel keeps it current.
@@ -266,10 +265,11 @@ struct ComposerView: View {
 
     var body: some View {
         let trigger = activeTrigger
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 2) {
             if let trigger {
                 CandidatePanel(model: model, context: context, hit: trigger, pick: { pick($0, over: trigger) }, showAll: { refocus = true; browsing = trigger },
                                onReturn: { panelReturn = $0 })
+                    .padding(.bottom, 6)
             }
             if voice.phase == .idle, !context.permissionOptions.isEmpty {
                 permissionBar.padding(.leading, 5)
@@ -385,10 +385,35 @@ struct ComposerView: View {
                 browsing = nil
             }
         }
-        .confirmationDialog("访问模式", isPresented: $showPermissions, titleVisibility: .visible) {
-            ForEach(context.permissionOptions, id: \.value) { option in
-                Button(Self.permissionTitle(option)) { choosePermission(option.value) }
+        .sheet(isPresented: $showPermissions, onDismiss: sheetClosed) {
+            NavigationStack {
+                List(context.permissionOptions, id: \.value) { option in
+                    Button {
+                        afterSheet = { choosePermission(option.value) }
+                        showPermissions = false
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: Self.permissionIcon(option.value)).foregroundStyle(Palette.link)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(Self.permissionTitle(option)).foregroundStyle(Palette.ink)
+                                if let detail = context.permissionDetails[option.value] {
+                                    Text(detail).font(.footnote).foregroundStyle(Palette.secondary)
+                                }
+                            }
+                            Spacer()
+                            if option.value == model.permission { Image(systemName: "checkmark").foregroundStyle(Palette.link) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(option.value == model.permission ? .isSelected : [])
+                }
+                .navigationTitle("访问模式")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { showPermissions = false } } }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .permissionConfirmation($confirmingPermission, confirm: applyPermission)
         // A popover has no `onDismiss`. A picker presented before its dismissal ends never shows.
@@ -399,7 +424,7 @@ struct ComposerView: View {
                 sheetClosed()
             }
         }
-        .onChange(of: showTray || showEditor || browsing != nil) { _, open in
+        .onChange(of: showPermissions || showTray || showEditor || browsing != nil) { _, open in
             if open { sheetUp.wrappedValue = true }
         }
         .onChange(of: composer.focusRequest) { focused = true }
@@ -519,33 +544,45 @@ struct ComposerView: View {
     /// warning once it is wider than the workspace. The menu is the list `/permission` offers, and the
     /// full-access choice keeps going through the confirmation the composer already shows.
     private var permissionBar: some View {
-        Menu {
-            Section("访问模式") {
-                ForEach(context.permissionOptions, id: \.value) { option in
-                    Button { choosePermission(option.value) } label: {
-                        Label(Self.permissionTitle(option), systemImage: option.value == model.permission ? "checkmark" : Self.permissionIcon(option.value))
-                    }
+        Button { showPermissions = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: permissionIsWide ? "exclamationmark.shield.fill" : "lock.shield")
+                Text(currentPermissionTitle).lineLimit(1).truncationMode(.tail)
+                if model.changingPermission {
+                    ProgressView().controlSize(.mini).accessibilityLabel("正在切换访问模式")
+                } else {
+                    Image(systemName: "chevron.down").font(.caption2.weight(.bold))
                 }
             }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: permissionIsWide ? "exclamationmark.shield.fill" : "lock.shield")
-                Text(currentPermissionTitle)
-                Image(systemName: "chevron.down").font(.caption2.weight(.bold))
-            }
-            .font(.caption.weight(.medium))
+            .font(.subheadline.weight(.medium))
             .foregroundStyle(permissionIsWide ? Palette.waiting : Palette.secondary)
-            .padding(.horizontal, 9)
-            .frame(minHeight: 26)
-            .background(permissionIsWide ? Palette.waiting.opacity(0.14) : Palette.control, in: Capsule())
+            .padding(.horizontal, 12)
+            .frame(minHeight: 40)
+            .background {
+                if permissionUsesGreenBorder {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Palette.running.opacity(0.12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Palette.running.opacity(0.9), lineWidth: 1.5)
+                        }
+                } else {
+                    Capsule().fill(permissionIsWide ? Palette.waiting.opacity(0.14) : Palette.control)
+                }
+            }
             .hitTarget()
         }
-        .disabled(changingPermission)
+        .buttonStyle(.plain)
+        .disabled(model.changingPermission)
         .accessibilityLabel(Text("访问模式"))
         .accessibilityValue(Text(currentPermissionTitle))
     }
 
     private var permissionIsWide: Bool { model.permission.map(Self.needsConfirmation) ?? false }
+
+    private var permissionUsesGreenBorder: Bool {
+        model.permission == "workspace-write" || model.permission == "read-only"
+    }
 
     private var currentPermissionTitle: String {
         guard let value = model.permission else { return String(localized: "访问模式") }
@@ -787,7 +824,7 @@ struct ComposerView: View {
     }
 
     private func sendButton(empty: Bool) -> some View {
-        let working = composer.executing
+        let working = composer.executing || model.changingPermission
         let ready = !empty && !working && !composer.uploadsPending
         return Button { send(.preferred) } label: {
             Group {
@@ -833,6 +870,7 @@ struct ComposerView: View {
     // MARK: Sending
 
     private func send(_ gesture: ComposerModel.Gesture) {
+        guard !model.changingPermission else { return }
         let trimmed = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
         // The client's own commands, typed bare.
         if composer.attachments.isEmpty, trimmed == "/model" || trimmed == "/file" {
@@ -921,7 +959,7 @@ struct ComposerView: View {
     // MARK: Permission (C-110)
 
     private func choosePermission(_ value: String) {
-        guard !changingPermission, value != model.permission else { return }
+        guard !model.changingPermission, value != model.permission else { return }
         Haptics.select()
         if Self.needsConfirmation(value) {
             confirmingPermission = value
@@ -936,19 +974,9 @@ struct ComposerView: View {
     }
 
     private func applyPermission(_ value: String) {
-        guard !changingPermission else { return }
-        changingPermission = true
         Task {
-            defer { changingPermission = false }
-            do {
-                let reply = try await model.executeCommand("/permission \(value)")
-                let result = reply["result"]
-                if result["kind"].string != "success" {
-                    app.showToast(result["text"].string ?? String(localized: "指令执行失败"), tone: .warning)
-                    return
-                }
-                model.refreshProjections()
-            } catch { app.showToast(composer.errorText(error), tone: .warning) }
+            do { try await model.changePermission(value) }
+            catch { app.showToast(composer.errorText(error), tone: .warning) }
         }
     }
 

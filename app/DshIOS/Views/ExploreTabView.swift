@@ -4,7 +4,7 @@ import WatchConnectivity
 /// Account access, frequently used settings and tools in the 探索 tab.
 struct ExploreTabView: View {
     enum Route: Hashable {
-        case account, models, schedules, installedPlugins, settings
+        case account, models, schedules, installedPlugins, settings, deskPet
         case miniApps, plugins, connectors, phoneControl, remote, watch, shortcuts, share
     }
 
@@ -29,6 +29,7 @@ struct ExploreTabView: View {
                 .groupedRow()
                 Section {
                     quickLink(.models, "模型", "cpu")
+                    quickLink(.deskPet, "桌宠", "pawprint")
                     // A button, not a link: the look goes on first and 设置 is pushed after it
                     // (`openSettings`), so the chevron is drawn here as a link's would be.
                     Button(action: openSettings) {
@@ -111,6 +112,7 @@ struct ExploreTabView: View {
                 case .shortcuts: ShortcutsGuidePage()
                 case .share: ShareAppPage()
                 case .settings: SettingsView(pushed: true)
+                case .deskPet: DeskPetSettingsPage()
                 }
             }
             // The rows say whether iCTRL runs and whether the watch has the app; both change while
@@ -256,7 +258,7 @@ private struct ExploreAccountRow: View {
 
     @ViewBuilder
     private var balances: some View {
-        if let amount = formatted(account.wallets ?? []) {
+        if let amount = formattedWalletAmounts(account.wallets ?? []) {
             Text("充值余额 \(amount)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(Palette.ink)
@@ -265,18 +267,11 @@ private struct ExploreAccountRow: View {
                 .font(.footnote)
                 .foregroundStyle(Palette.secondary)
         }
-        if let amount = formatted(account.bonusWallets) {
+        if let amount = formattedWalletAmounts(account.bonusWallets) {
             Text("赠金余额 \(amount)")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(Palette.secondary)
         }
     }
 
-    private func formatted(_ wallets: [JSON]) -> String? {
-        let amounts = wallets.compactMap { wallet -> String? in
-            guard let amount = wallet["balance"].string, !amount.isEmpty else { return nil }
-            return formatBalance(amount, currency: wallet["currency"].string)
-        }
-        return amounts.isEmpty ? nil : amounts.joined(separator: " + ")
-    }
 }

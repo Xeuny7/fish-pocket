@@ -476,10 +476,15 @@ struct AccountPage: View {
         .groupedRow()
     }
 
+    @ViewBuilder
     private func amounts(_ wallets: [JSON]) -> some View {
-        Text(wallets.map { formatBalance($0["balance"].string ?? "0", currency: $0["currency"].string) }.joined(separator: " + "))
-            .font(.title3.weight(.medium).monospacedDigit())
-            .foregroundStyle(Palette.ink)
+        if let amount = formattedWalletAmounts(wallets) {
+            Text(amount)
+                .font(.title3.weight(.medium).monospacedDigit())
+                .foregroundStyle(Palette.ink)
+        } else {
+            platformLink
+        }
     }
 
     /// A wallet read that failed still leads to Platform, where the balance can be checked.

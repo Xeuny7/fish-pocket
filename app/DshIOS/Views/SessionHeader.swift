@@ -21,12 +21,15 @@ struct SessionTitleMenu: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var durableTitle: String? { app.durableTitle(of: sessionId) ?? streamTitle }
     private var title: String { durableTitle ?? String(localized: "新会话") }
 
     var body: some View {
         Menu {
             Section {
+                if dynamicTypeSize.isAccessibilitySize { AIContentLabel() }
                 Button { app.renameRequest = RenameRequest(target: .session(sessionId), initial: durableTitle ?? "") } label: {
                     Label("重命名", systemImage: "pencil")
                 }
@@ -52,10 +55,10 @@ struct SessionTitleMenu: View {
                     Text(title).font(.callout.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                     Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Palette.secondary)
                 }
-                AIContentLabel()
+                if !dynamicTypeSize.isAccessibilitySize { AIContentLabel() }
             }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: crowded && sizeClass == .compact ? 176 : 240)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: crowded && sizeClass == .compact ? 156 : 240)
             .frame(minHeight: 44)
             .contentShape(Rectangle())
             .barTitleGlass()
