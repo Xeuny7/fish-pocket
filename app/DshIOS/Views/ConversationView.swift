@@ -22,6 +22,8 @@ struct ConversationView: View {
     /// (in a Bot's chat, which is pushed and has no drawer button of its own) the sidebar's button.
     @Environment(\.splitSidebar) private var splitSidebar
     @Environment(\.workbenchInSheet) private var workbenchInSheet
+    @Environment(\.conversationShortcuts) private var shortcuts
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: SessionModel?
     @State private var context = ComposerContext()
     @State private var workbenchOpen = false
@@ -46,6 +48,9 @@ struct ConversationView: View {
     @State private var atBottom = true
     @State private var showTurns = false
     @State private var timelineTop: CGFloat = 0
+    @State private var didRestoreTimeline = false
+    @State private var visibleTimelineRow: String?
+    @State private var lastSavedTimelineRow: String?
     /// What a timeline row opened. Up here, not on the row: a turn that closes folds its rows
     /// and would take the sheet along, and an approval arriving must be able to take over.
     @State private var detail: TimelineDetail?
@@ -55,9 +60,8 @@ struct ConversationView: View {
     /// Approvals seen since none were waiting, for the 「1/3」 of the sheet.
     @State private var approvalBatch: Set<String> = []
     @State private var keyboardUp = false
-    @State private var composerFocused = false
     /// The new-conversation page's free height: a short one drops the headline.
-    @State private var heroHeight: CGFloat = .infinity
+    @State private var heroHeight: CGFloat = 0
     /// iPhone Duo held partly open like a laptop: where the fold crosses that page.
     @State private var heroFold: CGFloat?
     /// A status or composer sheet is up: approvals and questions present once it has gone
@@ -73,7 +77,8 @@ struct ConversationView: View {
             if let model {
                 content(model)
             } else {
-                ConversationLoading().background(Palette.background)
+                ConversationLoading()
+                    .featurePage()
             }
         }
         .task {
@@ -94,6 +99,7 @@ struct ConversationView: View {
         .task(id: app.generation) { await presets.load(app.client) }
         .onDisappear {
             guard model != nil else { return }
+            saveTimelinePosition()
             app.localSessions.release(sessionId)
         }
         .trackKeyboard($keyboardUp)
@@ -156,6 +162,43 @@ struct ConversationView: View {
         }
     }
 
+    private var timelinePositionKey: String { "dsh.timelinePosition.\(sessionId)" }
+
+    private func saveTimelinePosition() {
+        guard #available(iOS 18.0, *), bot == nil, botTimeline == nil, didRestoreTimeline else { return }
+        guard atBottom || visibleTimelineRow != nil else { return }
+        let row = atBottom ? nil : visibleTimelineRow
+        guard row != lastSavedTimelineRow else { return }
+        UserDefaults.standard.set(row, forKey: timelinePositionKey)
+        lastSavedTimelineRow = row
+    }
+
+    private func restoreTimeline(_ model: SessionModel, proxy: ScrollViewProxy) async {
+        guard !didRestoreTimeline else { return }
+        if #available(iOS 18.0, *), bot == nil, botTimeline == nil,
+           let row = UserDefaults.standard.string(forKey: timelinePositionKey) {
+            lastSavedTimelineRow = row
+            // An anchor just outside the current history window can be recovered by paging.
+            for _ in 0..<3 {
+                if Task.isCancelled || !model.hasMoreHistory || model.items.contains(where: { model.rowId($0) == row }) { break }
+                await model.loadOlder()
+            }
+            guard !Task.isCancelled else { return }
+            if model.items.contains(where: { model.rowId($0) == row }) {
+                atBottom = false
+                // Let the newly paged rows settle before scrolling to the saved anchor.
+                try? await Task.sleep(for: .milliseconds(60))
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(row, anchor: .top)
+                didRestoreTimeline = true
+                return
+            }
+        }
+        atBottom = true
+        didRestoreTimeline = true
+        scrollToBottom(proxy, animated: false)
+    }
+
     private func isBlank(_ model: SessionModel) -> Bool {
         bot == nil && model.subagentAddress == nil && model.loaded && !model.hasItems && model.live.isEmpty && !model.running
             && model.composer.bubbles.isEmpty
@@ -174,6 +217,7 @@ struct ConversationView: View {
                     TimelineFoot(sessionId: sessionId, jobs: jobs, browserShown: browserBeside, chips: !blank && hasTools).id(Self.bottomId)
                 }
             }
+            .scrollContentBackground(.hidden)
             // Until the first read answers; a conversation known to be blank shows its own start.
             // The fade is the overlay's alone: animating the timeline's arrival would carry it past
             // the bottom anchor, and the page would open above the last message.
@@ -185,9 +229,14 @@ struct ConversationView: View {
                 }
                 .animation(.easeOut(duration: 0.2), value: model.loaded)
             }
-            // The first read in: open at the last message.
-            .onChange(of: model.loaded) { _, loaded in
-                if loaded { atBottom = true; scrollToBottom(proxy, animated: false) }
+            .task(id: model.loaded) {
+                if model.loaded { await restoreTimeline(model, proxy: proxy) }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { saveTimelinePosition() }
+            }
+            .onChange(of: atBottom) { _, bottom in
+                if bottom && didRestoreTimeline { saveTimelinePosition() }
             }
             .environment(\.timelineScroll, TimelineScroll(scrollBox, top: timelineTop) { id in
                 Task { @MainActor in
@@ -198,6 +247,10 @@ struct ConversationView: View {
             })
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { timelineTop = $0 }
             .modifier(TimelineAnchor())
+            .modifier(TimelineVisibleRows { ids in
+                visibleTimelineRow = ids.first
+                if didRestoreTimeline { saveTimelinePosition() }
+            })
             .modifier(BottomFollow(atBottom: $atBottom) { scrollToBottom(proxy, animated: $0) })
             // Any drag on the timeline hides the keyboard (`.interactively` only does when the finger reaches it),
             // even when the timeline is too short to scroll; so does a tap outside the composer.
@@ -267,15 +320,11 @@ struct ConversationView: View {
                 }
             }
         }
-        .background(Palette.background)
-        .overlay { if blank { hero(model) } }
+        .overlay { if blank { hero } }
         // Above the composer: the transcript and the ✕ while the bar is held to talk.
         .overlay { VoiceHoldOverlay(voice: model.composer.voice) }
         .conversationDock {
             VStack(alignment: .leading, spacing: 0) {
-                if blank && !composerFocused && model.composer.isEmpty {
-                    suggestions(model).padding(.bottom, 10)
-                }
                 if let accessory = bot?.accessory { accessory.padding(.bottom, 8) }
                 ComposerStatusBar(
                     model: model, keyboardUp: keyboardUp,
@@ -297,7 +346,6 @@ struct ConversationView: View {
                         focusOnAppear: app.pendingFocus.contains(sessionId),
                         consumeFocus: { app.pendingFocus.remove(sessionId) },
                         openLogExport: { headerSheet = .logExport },
-                        focusChanged: { composerFocused = $0 },
                         sheetUp: $inputSheetUp
                     )
                     .allowsHitTesting(presentedInteractionId(model) == nil)
@@ -307,18 +355,16 @@ struct ConversationView: View {
             .padding(.top, 6)
             .padding(.bottom, 8)
             .readableWidth()
-            // The starter prompts scroll past the dock's padding to the screen's edge, not into the
-            // safe area beside it: the status bar's column on iPhone Duo unfolded, the notch's side
-            // in landscape. Cut at the sides only.
-            .mask { Rectangle().padding(.vertical, -200) }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { app.composerHeight = $0 }
         }
+        .background { AppBackground().ignoresSafeArea(.container) }
         .modifier(ComposerDrop(composer: model.composer, enabled: model.subagentReadOnly(parentAvailable: parentAvailable(model)) == nil))
         // Under the toolbar: what is inside an inspector's main view does not reach the navigation bar.
         .modifier(WorkbenchBeside(model: model, open: $workbenchOpen, tab: $workbenchTab, regular: workbenchBeside, inspector: !workbenchInSheet && !ThisDevice.isDuo))
         // It names the window in the iPad app switcher. Not drawn while the title is the principal
         // item; with the title moved aside for the workbench it would show as a second one.
         .modifier(WindowTitle(sessionId: sessionId, hidden: titleBesideWorkbench))
+        .skinNavigationBackground()
         .navigationBarTitleDisplayMode(.inline)
         .conversationBar()
         // Stated, not left to the default: the workbench's files and changes hide the bar of
@@ -368,6 +414,17 @@ struct ConversationView: View {
                             chooseVoice: { headerSheet = .voice }
                         ) { headerSheet = .logExport }
                     }
+                }
+            }
+            if blank && bot == nil && !barButtonsAway {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Haptics.tap()
+                        showDeepSeekImport = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                    .accessibilityLabel("导入 DeepSeek 会话")
                 }
             }
             if !blank && !barButtonsAway {
@@ -544,15 +601,92 @@ struct ConversationView: View {
 
     // MARK: New conversation
 
-    private func hero(_ model: SessionModel) -> some View {
-        let showsHeadline = !keyboardUp && min(heroHeight, heroFold ?? .infinity) >= 220
-        return VStack(spacing: 14) {
-            if showsHeadline {
-                // The web's headline (`conversation.hero.headline`), so both shells greet the same way.
-                Text("探索未至之境").font(.system(size: 34, weight: .bold)).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .accessibilityAddTraits(.isHeader)
+    private var hero: some View {
+        let showsHeadline = !keyboardUp
+        return ScrollView {
+            VStack(spacing: 14) {
+                if showsHeadline { greeting }
+                workspaceControls
+                if !keyboardUp, let shortcuts { shortcutGrid(shortcuts) }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 20)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity, minHeight: min(heroHeight, heroFold ?? .infinity))
+        }
+        .frame(maxHeight: heroFold ?? .infinity)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .defaultScrollAnchor(.top)
+        .scrollDismissesKeyboard(.interactively)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroHeight = $0 }
+        .onGeometryChange(for: CGFloat?.self) { proxy in
+            proxy.fold.flatMap { $0.width > $0.height ? $0.minY : nil }
+        } action: { heroFold = $0 }
+        .animation(.snappy(duration: 0.2), value: showsHeadline)
+    }
+
+    private var greeting: some View {
+        TimelineView(.everyMinute) { context in
+            VStack(spacing: 5) {
+                Text(Self.greeting(at: context.date))
+                    .font(.largeTitle.weight(.medium))
+                    .foregroundStyle(Palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Text("欢迎使用 Fish Pocket")
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    static func greeting(at date: Date, calendar: Calendar = .autoupdatingCurrent) -> LocalizedStringKey {
+        switch calendar.component(.hour, from: date) {
+        case 5..<12: "上午好"
+        case 12..<18: "下午好"
+        default: "晚上好"
+        }
+    }
+
+    private func shortcutGrid(_ shortcuts: ConversationShortcuts) -> some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2)
+        return LazyVGrid(columns: columns, spacing: 10) {
+            shortcut(Text("工作区"), icon: "folder", tint: Palette.running) { openWorkbench(.files) }
+            shortcut(Text(MiniAppsPage.tabTitle), icon: "square.stack", tint: Palette.link, action: shortcuts.miniApps)
+            shortcut(Text("自动化"), icon: "clock.arrow.2.circlepath", tint: Palette.waiting, action: shortcuts.schedules)
+            shortcut(Text("插件市场"), icon: "puzzlepiece.extension", tint: Palette.link, action: shortcuts.plugins)
+        }
+    }
+
+    private func shortcut(_ title: Text, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityHidden(true)
+                title
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            .background(Palette.field, in: RoundedRectangle(cornerRadius: 15))
+            .contentShape(RoundedRectangle(cornerRadius: 15))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var workspaceControls: some View {
             // Side by side while both fit; a narrow window (iPhone Duo closed, Split View) stacks them
             // instead of folding a name onto two lines.
             RowOrColumn(spacing: 8) {
@@ -580,68 +714,6 @@ struct ConversationView: View {
                 .accessibilityLabel(Text("工作区：\(app.workspace(of: sessionId)?.displayTitle ?? "")"))
                 AgentPresetChip(sessionId: sessionId, catalog: presets)
             }
-            .padding(.top, 6)
-        }
-        .padding(.horizontal, 24)
-        // Centred in what is above the fold, when there is one.
-        .frame(maxWidth: .infinity, maxHeight: heroFold ?? .infinity)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .contentShape(Rectangle())
-        .onTapGesture { dismissKeyboard() }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroHeight = $0 }
-        .onGeometryChange(for: CGFloat?.self) { proxy in
-            proxy.fold.flatMap { $0.width > $0.height ? $0.minY : nil }
-        } action: { heroFold = $0 }
-        .animation(.snappy(duration: 0.2), value: showsHeadline)
-    }
-
-    /// Starter prompts; a tap fills the input, to send as is or to change first.
-    private func suggestions(_ model: SessionModel) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Button {
-                    Haptics.tap()
-                    showDeepSeekImport = true
-                } label: {
-                    Label("导入 DeepSeek 会话", systemImage: "square.and.arrow.down")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Palette.onInk)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 40)
-                        .background(Palette.ink, in: Capsule())
-                        .hitTarget()
-                }
-                ForEach(Self.suggestions, id: \.self) { text in
-                    Button {
-                        Haptics.tap()
-                        model.composer.text = text
-                        model.composer.requestFocus()
-                    } label: {
-                        Text(text).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.85))
-                            .padding(.horizontal, 16)
-                            .frame(minHeight: 40)
-                            .overlay(Capsule().strokeBorder(Palette.control))
-                            .hitTarget()
-                    }
-                }
-            }
-            .padding(.horizontal, 4)
-        }
-        .scrollClipDisabled()
-    }
-
-    /// What it can do as an assistant on this phone: device capabilities, a mini app, another app
-    /// through phone control, a scheduled task. Each one works when sent as is; a capability that is
-    /// switched off, or phone control not set up, gets the agent's answer saying where to turn it on.
-    private static var suggestions: [String] {
-        [
-            String(localized: "看看我今天有什么安排"),
-            String(localized: "帮我做一个记账小工具"),
-            String(localized: "打开淘宝，看看我的快递到哪了"),
-            String(localized: "每天早上 8 点给我整理一份新闻早报"),
-            String(localized: "20 分钟后提醒我关火"),
-            String(localized: "附近有什么好吃的"),
-        ]
     }
 
     // MARK: Approvals and questions
@@ -758,6 +830,20 @@ struct TimelineRows<Rows: View>: View {
                 // At their own height: the stack would share the whole room out among them.
                 VStack { rows }.fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+private struct TimelineVisibleRows: ViewModifier {
+    let update: ([String]) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollTargetVisibilityChange(idType: String.self, threshold: 0.1) { ids in
+                update(ids)
+            }
+        } else {
+            content
         }
     }
 }
@@ -1118,7 +1204,7 @@ private struct TimelineList: View {
         // Not lazy: a lazy stack estimates the heights of rows it has not laid out, and when a long
         // timeline grows the estimate leaves the bottom-anchored viewport past the real end (a blank page
         // after sending). The snapshot holds only the recent history and rows skip unchanged redraws.
-        VStack(alignment: .leading, spacing: 20) {
+        let timeline = VStack(alignment: .leading, spacing: 20) {
             if model.hasMoreHistory { LoadOlderTrigger(model: model) }
             // A Bot's chat moves to a fresh part when it grows long; the earlier parts come from ds-bot.
             if !model.hasMoreHistory, model.loaded, let from = bot?.earlierFrom { BotEarlierParts(sessionId: from) }
@@ -1131,7 +1217,7 @@ private struct TimelineList: View {
                     // A Bot's post into the group: a message of the group, unless its round shows it already.
                     if !trigger.postShown { RoomPostView(trigger: trigger).id(item.id) }
                 } else if item.id == activeTurn, case .assistant(let turn, let blocks, let started, _) = item {
-                    ActiveTurn(model: model, turn: turn, blocks: blocks, startedAt: started)
+                    ActiveTurn(model: model, turn: turn, blocks: blocks, startedAt: started).id(row.id)
                 } else {
                     let isLast = item.id == lastAssistant
                     TimelineRow(
@@ -1174,6 +1260,7 @@ private struct TimelineList: View {
         .padding(.top, 20)
         .padding(.bottom, 12)
         .readableWidth()
+        timeline.scrollTargetLayout()
     }
 
     private struct Row: Identifiable {
@@ -1523,7 +1610,7 @@ struct AssistantTurnView: View {
     @Environment(AppModel.self) private var app
     /// A Bot's chat: its reasoning shows only when asked for, and what it did beyond its words is drawn.
     @Environment(\.botTimeline) private var bot
-    /// A Bot's own chat: the Bot's mark at the tail is the one loading indicator.
+    /// A Bot's own chat holds its answer until the turn ends.
     @Environment(\.botComposer) private var botChat
     @Environment(\.fileLinkScope) private var linkScope
 
@@ -1536,9 +1623,8 @@ struct AssistantTurnView: View {
         let finished = !inProgress && endedAt != nil
         let showWork = choice ?? stayOpen
         let ownChat = if case .bot? = botChat { true } else { false }
-        // A Bot's own chat at work shows nothing of the turn: the Bot's line below says what it is
-        // doing, and its reply arrives whole when the turn ends. Words it ends on a card with show
-        // at once, since the card waits on the user.
+        // A Bot's answer still arrives whole. Its live activity and any card waiting for the
+        // user can appear as the turn runs.
         let quiet = inProgress && ownChat
         // A Bot's reply held back while it was written comes in as a whole: it fades and rises into
         // place. Decided from when the turn ended, so the first pass that shows it already knows.
@@ -1546,44 +1632,35 @@ struct AssistantTurnView: View {
         let tailShown = !quiet || blocks.dropFirst(finalStart).contains { block in
             if case .tool(let call) = block { BotTurnEvents.cards.contains(call.displayName) } else { false }
         }
-        // With nothing of the turn to show (a Bot at work in its own chat) there is no view at all. An
-        // empty stack would still be a row of the timeline: the spacing around it pushed the message
-        // above it up a little as the turn's first step came in.
-        // A Bot's finished reply has no step line, as in ds-bot's own window: what it did that a reader
-        // wants is drawn in the reply (`BotTurnEvents`), and opened, the line held little else.
-        // A reply cut short keeps it, for the 「已停止」「处理失败」 it carries.
         let botReply = bot != nil && !inProgress && !["aborted", "interrupted", "error"].contains(info?.closedKind ?? "")
-        if tailShown {
+        let botActivityOnly = ownChat && (quiet || botReply)
+        let work = Array(blocks.prefix(finalStart).enumerated()).filter { _, block in
+            if bot?.hides(block) == true { return false }
+            guard botActivityOnly else { return true }
+            switch block {
+            case .reasoning: return true
+            case .tool(let call): return [.webSearch, .webFetch].contains(StepKind(tool: call.name))
+            default: return false
+            }
+        }
+        let leadingWork = botActivityOnly ? !work.isEmpty
+            : !botReply && (finalStart > 0 || (inProgress && (blocks.isEmpty || liveCount == 0)))
+        if tailShown || leadingWork {
             VStack(alignment: .leading, spacing: 8) {
-                if botReply {
-                    // With 「显示思考过程」 on, its reasoning shows on its own, as ds-bot's thinking row does.
-                    if let bot, bot.showsThinking {
-                        let reasoning = Array(blocks.prefix(finalStart).filter { if case .reasoning = $0 { true } else { false } })
-                        if !reasoning.isEmpty {
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(reasoning, id: \.id) { block in BlockView(block: block, live: false).equatable() }
-                                if let turn, finished { BotThinkingTime(turn: turn) }
-                            }
-                        }
-                    }
-                    ForEach(madePictures, id: \.id) { call in ImageGenCard(call: call, live: false) }
-                }
-                // While working the step line always shows (the one loading indicator of the turn);
-                // a streamed answer with no work before it needs none.
-                if !botReply, !quiet, finalStart > 0 || (inProgress && !ownChat && (blocks.isEmpty || liveCount == 0)) {
+                if leadingWork {
                     Button {
                         withAnimation(.easeInOut(duration: 0.18)) { choice = !showWork }
                     } label: {
                         HStack(spacing: 10) {
-                            if inProgress && !ownChat {
-                                ProgressView().controlSize(.small).tint(Palette.link)
+                            if inProgress {
+                                ProgressView().controlSize(.mini).tint(Palette.link)
                             } else {
-                                Image(systemName: "list.bullet").foregroundStyle(Palette.link)
+                                Image(systemName: activityIcon).foregroundStyle(activityTint)
                                     .accessibilityHidden(true)
                             }
-                            Text(summaryLine)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Palette.ink)
+                            Text(summaryLine(last: work.last, visibleBlocks: botActivityOnly ? work.map(\.element) : blocks))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(activityTint)
                                 .lineLimit(2).truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "chevron.right")
@@ -1592,27 +1669,38 @@ struct AssistantTurnView: View {
                                 .rotationEffect(.degrees(showWork ? 90 : 0))
                                 .accessibilityHidden(true)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 8)
                         .frame(minHeight: 44)
-                        .featurePanel(cornerRadius: 12)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint(showWork ? "收起步骤" : "展开步骤")
-                    if showWork, finalStart > 0 {
+                    if showWork, !work.isEmpty {
                         VStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(blocks.prefix(finalStart).enumerated()), id: \.element.id) { index, block in
-                                if bot?.hides(block) != true { BlockView(block: block, live: isLive(index)).equatable() }
+                            ForEach(work, id: \.element.id) { index, block in
+                                BlockView(block: block, live: isLive(index)).equatable()
                             }
-                            if let bot, bot.showsThinking, let turn, finished { BotThinkingTime(turn: turn) }
+                            if bot?.showsThinking == true, let turn, finished,
+                               work.contains(where: { if case .reasoning = $0.element { true } else { false } }) {
+                                BotThinkingTime(turn: turn)
+                            }
                         }
                         .padding(.leading, 8)
                         .overlay(alignment: .leading) { Capsule().fill(Palette.link.opacity(0.30)).frame(width: 2) }
                     }
                 }
-                // Pictures the turn made are what it was for: they stay out when its work folds away.
-                if !botReply, !quiet, !showWork {
+                // Group replies keep their existing inline reasoning display.
+                if botReply, !ownChat, bot?.showsThinking == true {
+                    let reasoning = work.map(\.element).filter { if case .reasoning = $0 { true } else { false } }
+                    if !reasoning.isEmpty {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(reasoning, id: \.id) { block in BlockView(block: block, live: false).equatable() }
+                            if let turn, finished { BotThinkingTime(turn: turn) }
+                        }
+                    }
+                }
+                // Bot activity shows search and reasoning; keep its generated pictures outside it.
+                if botReply || (!quiet && !showWork) {
                     ForEach(madePictures, id: \.id) { call in ImageGenCard(call: call, live: false) }
                 }
                 // In a Bot's chat: what it did while working, above its words; a card it ended on, below them.
@@ -1716,26 +1804,40 @@ struct AssistantTurnView: View {
 
     private func isLive(_ index: Int) -> Bool { inProgress && index >= blocks.count - liveCount }
 
-    private var calls: [ToolCall] {
-        blocks.compactMap { if case .tool(let call) = $0 { return call }; return nil }
+    private var activityIcon: String {
+        switch info?.closedKind {
+        case "aborted", "interrupted": "stop.circle"
+        case "error": "exclamationmark.circle"
+        default: "checkmark.circle"
+        }
     }
 
-    private var summaryLine: String {
+    private var activityTint: Color {
+        switch info?.closedKind {
+        case "aborted", "interrupted": Palette.waiting
+        case "error": Palette.removed
+        default: Palette.secondary
+        }
+    }
+
+    private func summaryLine(last: (offset: Int, element: AssistantBlock)?, visibleBlocks: [AssistantBlock]) -> String {
         if inProgress {
-            // As the web: the running tool, else the reasoning streaming, else the model is on its next step.
-            if case .tool(let call)? = blocks.prefix(finalAnswerStart).last, !call.finished {
+            if let last, case .tool(let call) = last.element, !call.finished {
                 let kind = StepKind(tool: call.name)
-                let streaming = isLive(finalAnswerStart - 1)
+                let streaming = isLive(last.offset)
                 return [streaming ? kind.preparing : kind.running, call.summary].filter { !$0.isEmpty }.joined(separator: " · ")
             }
-            if case .reasoning(_, let text)? = blocks.last, liveCount > 0 {
+            if let last, case .reasoning(_, let text) = last.element, isLive(last.offset) {
                 let summary = ReasoningSummary.make(text, live: true)
                 if !summary.isEmpty { return summary }
             }
             return StepKind.thinking.running
         }
-        // A voice message is the reply, not a step of the work.
-        return [StepKind.title(calls: calls.filter { !VoiceMessageBubble.handles($0) }), closedLabel].compactMap { $0 }.joined(separator: " · ")
+        let calls = visibleBlocks.compactMap { block -> ToolCall? in
+            guard case .tool(let call) = block, !VoiceMessageBubble.handles(call) else { return nil }
+            return call
+        }
+        return [StepKind.title(calls: calls), closedLabel].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var closedLabel: String? {
@@ -1814,6 +1916,16 @@ private struct BlockView: View, Equatable {
     }
 }
 
+struct ConversationShortcuts {
+    var miniApps: () -> Void
+    var schedules: () -> Void
+    var plugins: () -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var conversationShortcuts: ConversationShortcuts? = nil
+}
+
 /// The reasoning's first line as a row, the same as a tool call's (C-25); the whole of it in a sheet.
 private struct ReasoningView: View {
     let id: String
@@ -1871,7 +1983,7 @@ struct ReasoningSheet: View {
                 }
                 .padding(16)
             }
-            .background(Palette.background)
+            .featurePage()
             .navigationTitle("思考")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

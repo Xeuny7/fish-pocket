@@ -100,27 +100,10 @@ BOT_PATCHES = [
 ]
 
 OTHER_PATCHES = [
-    (CONV, "conversation canvas",
-     "                ConversationLoading().background(Palette.background)\n            }\n        }\n        .task {",
-     "                ConversationLoading()\n            }\n        }\n"
-     "        .frame(maxWidth: .infinity, maxHeight: .infinity)\n"
-     "        .skinNavigationBackground()\n        .task {"),
-    (CONV, "conversation scroll background",
-     "            // Until the first read answers; a conversation known to be blank shows its own start.",
-     "            .scrollContentBackground(.hidden)\n"
-     "            // Until the first read answers; a conversation known to be blank shows its own start."),
     (MAIN, "main layout backdrop",
      "        .background { HomeBadgeCounter(badges: $badges) }",
      "        .background { HomeBadgeCounter(badges: $badges) }\n"
      "        .background { AppBackground().ignoresSafeArea(.container) }"),
-    (CONV, "conversation content",
-     "        .background(Palette.background)\n        .overlay { if blank { hero(model) } }",
-     "        // Use the shared backdrop through the message list and composer.\n"
-     "        .overlay { if blank { hero(model) } }"),
-    (CONV, "conversation canvas inside inspector",
-     "        .modifier(ComposerDrop(composer: model.composer, enabled: model.subagentReadOnly(parentAvailable: parentAvailable(model)) == nil))",
-     "        .background { AppBackground().ignoresSafeArea(.container) }\n"
-     "        .modifier(ComposerDrop(composer: model.composer, enabled: model.subagentReadOnly(parentAvailable: parentAvailable(model)) == nil))"),
     (CONV, "conversation footer",
      "        .conversationDock {\n            VStack(alignment: .leading, spacing: 0)",
      "        .safeAreaInset(edge: .bottom, spacing: 0) {\n            VStack(alignment: .leading, spacing: 0)"),
@@ -128,9 +111,6 @@ OTHER_PATCHES = [
      "        .conversationBar()\n        // Stated, not left to the default:",
      "        .conversationBar()\n        .toolbarBackground(.hidden, for: .navigationBar)\n"
      "        // Stated, not left to the default:"),
-    (CONV, "reasoning page",
-     '            .background(Palette.background)\n            .navigationTitle("思考")',
-     '            .background(AppBackground())\n            .navigationTitle("思考")'),
     (RECORDS, "records page",
      "        .background(systemLists ? Color(.systemGroupedBackground) : Palette.grouped)",
      "        .background(AppBackground())"),

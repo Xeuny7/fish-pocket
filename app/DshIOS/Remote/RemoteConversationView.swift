@@ -34,7 +34,7 @@ struct RemoteConversationView: View {
             if let model {
                 content(model)
             } else {
-                ConversationLoading().background(Palette.background)
+                ConversationLoading().featurePage()
                     .toolbar { if let openDrawer { ToolbarItem(placement: .topBarLeading) { DrawerButton(action: openDrawer) } } }
             }
         }
@@ -101,7 +101,7 @@ struct RemoteConversationView: View {
                 .animation(.snappy(duration: 0.18), value: atBottom)
             }
         }
-        .background(Palette.background)
+        .scrollContentBackground(.hidden)
         .overlay { placeholder(model) }
         .conversationDock {
             dock(model)
@@ -111,6 +111,8 @@ struct RemoteConversationView: View {
                 .readableWidth()
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { app.composerHeight = $0 }
         }
+        .background { AppBackground().ignoresSafeArea(.container) }
+        .skinNavigationBackground()
         .navigationTitle(model.meta?.displayTitle ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .conversationBar()

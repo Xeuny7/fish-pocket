@@ -225,7 +225,6 @@ struct ComposerView: View {
     /// `/export`: the web downloads the ZIP itself, so this opens the log sheet instead of executing.
     var openLogExport: () -> Void = {}
     /// The input took or lost focus (the new-conversation page makes room around it).
-    var focusChanged: (Bool) -> Void = { _ in }
     /// On from opening one of the composer's sheets until it is gone; the conversation's own sheets wait for it.
     var sheetUp: Binding<Bool> = .constant(false)
     @Environment(AppModel.self) private var app
@@ -403,7 +402,6 @@ struct ComposerView: View {
         .onChange(of: focused) { _, now in
             // Anything that brings the keyboard back (a prompt placed, a tray choice) shows the text.
             if now { voice.mode = false }
-            focusChanged(now)
         }
         // A call or the app leaving the foreground ends the hold without a touch-up: throw it away.
         .onChange(of: scenePhase) { _, phase in if phase != .active { voice.cancel() } }

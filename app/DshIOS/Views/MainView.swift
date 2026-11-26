@@ -1,7 +1,7 @@
 import StoreKit
 import SwiftUI
 
-/// The root. From iOS 18 the system's adaptable tab bar in every width: 会话, Bot, Mini Apps and 探索,
+/// The root. From iOS 18 the system's adaptable tab bar in every width: 会话, Bot and 探索,
 /// at the bottom on a phone, at the top or as a sidebar where there is room (iPad, iPhone Duo open).
 /// The 会话 tab pushes a conversation over its list where it is narrow and keeps one beside it where it
 /// is wide. On an iPhone before iOS 18 the same tabs, on the tab bar of that time (always at the
@@ -10,7 +10,7 @@ import SwiftUI
 /// narrow a drawer that slides in from the left.
 struct MainView: View {
     /// The phone's tabs.
-    enum HomeTab: Hashable { case sessions, bot, miniApps, explore }
+    enum HomeTab: Hashable { case sessions, bot, explore }
 
     enum Sheet: String, Identifiable { case settings, plugins, store, schedules, signIn, cordis, share, watch, capabilities, connectors, phoneControl, remote, fishPocket, deepSeekAccount, miniApps, imageGen, shortcuts; var id: String { rawValue } }
 
@@ -22,6 +22,7 @@ struct MainView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @AppStorage("dsh.currentWorkspace") private var workspaceId = ""
+    @AppStorage("dsh.lastLocalConversation") private var lastLocalConversation = ""
     @State private var selection: String?
     @State private var sheet: Sheet?
     /// In regular width the plugin store takes the conversation's place beside the sidebar.
@@ -69,6 +70,7 @@ struct MainView: View {
     /// 「在电脑上新建会话」, once whatever sheet asked for it has gone.
     @State private var remoteTarget: RemoteSessionTarget?
     @State private var didOpenHome: Bool
+    @State private var startupPending: Bool
     @State private var navigationRevision = UUID()
     @State private var followingLink: UUID?
     @State private var waitingForNewSession: UUID?
@@ -81,6 +83,7 @@ struct MainView: View {
         _selection = State(initialValue: session)
         _sessionsPath = State(initialValue: session.map { [.session($0)] } ?? [])
         _didOpenHome = State(initialValue: session != nil)
+        _startupPending = State(initialValue: session == nil)
         _link = link
     }
 
@@ -142,7 +145,9 @@ struct MainView: View {
     /// The width's own layout, with the way into the plugin store.
     private var layout: some View {
         Group {
-            if #available(iOS 18.0, *) {
+            if startupPending {
+                ConversationLoading()
+            } else if #available(iOS 18.0, *) {
                 tabLayout
             } else if usesTabs {
                 phoneTabLayout
@@ -168,6 +173,8 @@ struct MainView: View {
         }
         .onChange(of: app.botTeam.openRequest?.token) { _, token in
             guard token != nil, let request = app.botTeam.openRequest else { return }
+            startupPending = false
+            didOpenHome = true
             app.botTeam.openRequest = nil
             sheet = nil
             storeOpen = false
@@ -230,7 +237,11 @@ struct MainView: View {
                 await follow(request.link)
                 if followingLink == revision {
                     followingLink = nil
-                    launched()
+                    if creating {
+                        didOpenHome = true
+                    } else {
+                        launched()
+                    }
                 }
             }
         }
@@ -265,6 +276,17 @@ struct MainView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .focusedSceneValue(\.windowCommands, windowCommands)
         .task(id: workspace?.id) { launched() }
+        .task(id: startupPending) {
+            guard startupPending else { return }
+            // If the engine cannot supply the workspace catalog, leave the list available.
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled else { return }
+            didOpenHome = true
+            startupPending = false
+        }
+        .onChange(of: app.lastError) { _, error in
+            if error != nil { startupPending = false; didOpenHome = true }
+        }
         // Which store this copy came from: only an App Store install is asked for a rating.
         .task { await AppDistribution.refresh() }
         // The sidebar and shortcuts use the same Mini Apps destination.
@@ -322,6 +344,8 @@ struct MainView: View {
         .onChange(of: selection) { _, id in
             if id != nil { navigationRevision = UUID() }
             app.currentSession = shownSession
+            if let id, isRestorable(id) { lastLocalConversation = id }
+            if id != nil { startupPending = false }
             if usesTabs {
                 showInTabs(id)
                 return
@@ -341,6 +365,7 @@ struct MainView: View {
         .onChange(of: app.openRequest?.token, initial: true) { _, token in
             guard token != nil, scenePhase != .background, let id = app.openRequest?.id else { return }
             app.openRequest = nil
+            didOpenHome = true
             // Asked for over a sheet (a toast there): the sheet goes, or the session opens unseen behind it.
             sheet = nil
             botOpen = false
@@ -369,10 +394,10 @@ struct MainView: View {
                     try? await Task.sleep(for: .milliseconds(100))
                 }
                 guard waitingForNewSession == request.token else { return }
-                defer { waitingForNewSession = nil }
+                defer { waitingForNewSession = nil; if !creating { startupPending = false } }
                 let target = request.workspaceId.flatMap { id in app.workspaces.first { $0.id == id } } ?? workspace
                 if let target { workspaceId = target.id }
-                newConversation(in: target, agentPreset: request.agentPreset, draft: request.draft, prompt: request.prompt)
+                newConversation(in: target, agentPreset: request.agentPreset, draft: request.draft, prompt: request.prompt, finishesStartup: startupPending)
             }
         }
         .onChange(of: app.credentialRequest?.token) { _, token in
@@ -385,11 +410,29 @@ struct MainView: View {
         #endif
     }
 
-    /// An ordinary launch opens a local blank conversation; a requested route keeps priority.
+    /// Resolve the local destination before making the session stack visible.
     private func launched() {
         guard !didOpenHome, let workspace, link == nil, followingLink == nil else { return }
+        guard app.openRequest == nil, app.newSessionRequest == nil, app.botTeam.openRequest == nil else { return }
         didOpenHome = true
-        if canOpenLocalConversation { newConversation(in: workspace, automatic: true) }
+        guard canOpenLocalConversation, !creating else {
+            startupPending = false
+            return
+        }
+        if isRestorable(lastLocalConversation) {
+            selection = lastLocalConversation
+            if usesTabs { showInTabs(lastLocalConversation) }
+            startupPending = false
+        } else {
+            newConversation(in: workspace, automatic: true, finishesStartup: true)
+        }
+    }
+
+    private func isRestorable(_ id: String) -> Bool {
+        guard !id.isEmpty, !app.archived.contains(id), !app.botTeam.teamSessionIds.contains(id),
+              let session = app.sessions[id], !session.isSubagent, !session.migrationRequired,
+              let owner = app.workspace(of: id), !isTeamWorkspace(owner) else { return false }
+        return true
     }
 
     private var canOpenLocalConversation: Bool {
@@ -563,6 +606,9 @@ struct MainView: View {
             Text(app.lastError ?? "")
         }
         .environment(\.openSession, OpenSessionAction(openSessionBox) { open(session: $0) })
+        .environment(\.conversationShortcuts, ConversationShortcuts(
+            miniApps: openMiniApps, schedules: openSchedules, plugins: openPlugins
+        ))
     }
 
     // MARK: Credentials
@@ -807,16 +853,22 @@ struct MainView: View {
         } else if layoutWidth == .regular { storeOpen = true } else { sheet = .store }
     }
 
-    /// Mini Apps has its own tab and remains available from Explore.
     private func openMiniApps() {
+        startupPending = false
+        didOpenHome = true
         if usesTabs {
             sheet = nil
-            tab = .miniApps
+            tab = .explore
+            if explorePath.last != .miniApps { explorePath = [.miniApps] }
         } else { sheet = .miniApps }
     }
 
-    private var miniAppsTab: some View {
-        NavigationStack { MiniAppsPage() }
+    private func openSchedules() {
+        if usesTabs {
+            sheet = nil
+            tab = .explore
+            if explorePath.last != .schedules { explorePath = [.schedules] }
+        } else { sheet = .schedules }
     }
 
     private func setDrawer(_ open: Bool) {
@@ -863,11 +915,6 @@ struct MainView: View {
                 tabLabel(Text(verbatim: "Bot"), "fp.bot", custom: true)
             }
             .badge(badges.botPending)
-            Tab(value: HomeTab.miniApps) {
-                miniAppsTab
-            } label: {
-                tabLabel(Text(MiniAppsPage.tabTitle), "square.stack")
-            }
             Tab(value: HomeTab.explore) {
                 ExploreTabView(path: $explorePath)
             } label: {
@@ -897,9 +944,6 @@ struct MainView: View {
                 .tabItem { tabLabel(Text(verbatim: "Bot"), "fp.bot", custom: true) }
                 .tag(HomeTab.bot)
                 .badge(badges.botPending)
-            miniAppsTab
-                .tabItem { tabLabel(Text(MiniAppsPage.tabTitle), "square.stack") }
-                .tag(HomeTab.miniApps)
             ExploreTabView(path: $explorePath)
                 .tabItem { tabLabel(Text("探索"), "square.grid.2x2") }
                 .tag(HomeTab.explore)
@@ -1168,7 +1212,7 @@ struct MainView: View {
             }
             let target = workspaceId.flatMap { id in app.workspaces.first { $0.id == id } } ?? workspace
             if let target { self.workspaceId = target.id }
-            newConversation(in: target, agentPreset: preset, draft: draft, focus: true)
+            newConversation(in: target, agentPreset: preset, draft: draft, focus: true, finishesStartup: startupPending)
         case .share:
             if let shared { await receive(shared) }
         case .app(let id):
@@ -1253,7 +1297,7 @@ struct MainView: View {
             try? await Task.sleep(for: .milliseconds(100))
         }
         botOpen = false
-        newConversation(in: workspace, draft: shared.text, files: files, focus: true)
+        newConversation(in: workspace, draft: shared.text, files: files, focus: true, finishesStartup: startupPending)
     }
 
     /// Text and files waiting for a session's composer, which takes them when it shows.
@@ -1264,12 +1308,15 @@ struct MainView: View {
     }
 
     /// Open a blank conversation in `workspace` (the engine reuses a blank one there).
-    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false, automatic: Bool = false) {
+    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false, automatic: Bool = false, finishesStartup: Bool = false) {
         guard let workspace, !creating else { return }
         let revision = navigationRevision
         creating = true
         Task {
-            defer { creating = false }
+            defer {
+                creating = false
+                if finishesStartup { startupPending = false }
+            }
             do {
                 let id = try await app.createSession(in: workspace, agentPreset: agentPreset)
                 if let draft { app.pendingDrafts[id] = draft }

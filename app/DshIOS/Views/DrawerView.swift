@@ -128,7 +128,7 @@ struct DrawerView: View {
             .sessionList()
             // Both bars float: the list scrolls under them, up to the screen's edges.
             .floatingBars(top: topBar, bottom: bottomBar)
-            .background(Palette.background)
+            .featurePage()
             // 操控手机's row says whether iCTRL runs; it changes while the user is in iCTRL.
             .task { await phoneControl.refresh() }
             .onChange(of: scenePhase) { _, phase in
@@ -162,7 +162,7 @@ struct DrawerView: View {
             }
         }
         .sessionList()
-        .background(Palette.background)
+        .featurePage()
         .tabEdgesSoftened()
         .navigationTitle(Self.sessionsTitle)
         // A small title, as every tab's: a large one only takes room.
@@ -236,7 +236,7 @@ struct DrawerView: View {
                     .accessibilityElement(children: .combine)
                 }
             }
-            .background(Palette.background)
+            .featurePage()
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, isPresented: $searchActive, prompt: "搜索会话")
             .textInputAutocapitalization(.never)
@@ -983,10 +983,9 @@ struct DrawerView: View {
             }
         }
         .sessionList()
-        .background(Palette.background)
+        .featurePage()
         .navigationTitle("已归档会话")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Palette.background, for: .navigationBar)
     }
 
     private func emptyRow(_ text: LocalizedStringKey) -> some View {

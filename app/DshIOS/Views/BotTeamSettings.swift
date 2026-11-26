@@ -11,21 +11,20 @@ struct BotTeamSettingsView: View {
         List {
             Section {
                 NavigationLink { BotConnectorsPage() } label: {
-                    LabeledContent { Text("\(team.connectors.filter { $0["state"].string == "ready" }.count) 个已连接") } label: {
-                        Label("连接器", systemImage: "point.3.connected.trianglepath.dotted")
-                    }
+                    SettingsRowLabel("连接器", icon: "point.3.connected.trianglepath.dotted",
+                                     value: String(localized: "\(team.connectors.filter { $0["state"].string == "ready" }.count) 个已连接"))
                 }
                 NavigationLink { BotCapabilitiesPage() } label: {
-                    LabeledContent { Text("\(team.capabilities.count) 个") } label: { Label("能力", systemImage: "puzzlepiece") }
+                    SettingsRowLabel("能力", icon: "puzzlepiece", value: String(localized: "\(team.capabilities.count) 个"))
                 }
                 NavigationLink { BotSecretsPage() } label: {
-                    LabeledContent { Text("\(team.secrets.count) 个") } label: { Label("密钥", systemImage: "key") }
+                    SettingsRowLabel("密钥", icon: "key", value: String(localized: "\(team.secrets.count) 个"))
                 }
                 NavigationLink { BotMailPage() } label: {
-                    LabeledContent { Text("\(team.mail["accounts"].array.count) 个邮箱") } label: { Label("邮箱", systemImage: "envelope") }
+                    SettingsRowLabel("邮箱", icon: "envelope", value: String(localized: "\(team.mail["accounts"].array.count) 个邮箱"))
                 }
                 NavigationLink { BotIMPage() } label: {
-                    LabeledContent { Text("\(team.team["im"]["connections"].array.count) 个") } label: { Label("聊天软件", systemImage: "message") }
+                    SettingsRowLabel("聊天软件", icon: "message", value: String(localized: "\(team.team["im"]["connections"].array.count) 个"))
                 }
             } footer: {
                 Text("连接器、能力和密钥整个团队共用，每个 Bot 能用哪些在它自己的资料页里开关。")
@@ -33,14 +32,11 @@ struct BotTeamSettingsView: View {
             .groupedRow()
             Section {
                 Toggle(isOn: Binding(get: { team.showsThinking }, set: { on in Task { await team.setPrefs(["thinking": .bool(on)]) } })) {
-                    Label("显示思考过程", systemImage: "brain")
+                    SettingsRowLabel("显示思考过程", icon: "brain")
                 }
-                // A row like the ones above, value on the right: the long「跟随 DSH（…）」choice
-                // wrapped a menu picker's value under its title.
                 NavigationLink { DefaultBotModelPage() } label: {
-                    LabeledContent {
-                        Text(team.prefs["defaultBotModel"].string.flatMap(team.modelName) ?? String(localized: "跟随 DSH"))
-                    } label: { Label("新 Bot 的默认模型", systemImage: "cpu") }
+                    SettingsRowLabel("新 Bot 的默认模型", icon: "cpu",
+                                     value: team.prefs["defaultBotModel"].string.flatMap(team.modelName) ?? String(localized: "跟随 DSH"))
                 }
             } header: {
                 Text("偏好")
@@ -69,9 +65,9 @@ struct BotTeamSettingsView: View {
                 .groupedRow()
             }
             Section {
-                NavigationLink { BotUsagePage() } label: { Label("用量", systemImage: "chart.bar") }
-                NavigationLink { BotWorkspacePage() } label: { Label("团队工作区", systemImage: "folder") }
-                NavigationLink { BotDiagnosticsPage() } label: { Label("问题诊断", systemImage: "stethoscope") }
+                NavigationLink { BotUsagePage() } label: { SettingsRowLabel("用量", icon: "chart.bar") }
+                NavigationLink { BotWorkspacePage() } label: { SettingsRowLabel("团队工作区", icon: "folder") }
+                NavigationLink { BotDiagnosticsPage() } label: { SettingsRowLabel("问题诊断", icon: "stethoscope") }
             }
             .groupedRow()
             Section {

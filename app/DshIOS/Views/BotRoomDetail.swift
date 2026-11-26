@@ -73,6 +73,7 @@ struct RoomDetailView: View {
                     }
                 } else {
                     ContentUnavailableView("这个群聊已经不在了", systemImage: "person.2.slash")
+                        .featurePage()
                 }
             }
             .navigationTitle(team.room(roomId).map(team.name(of:)) ?? String(localized: "群聊"))

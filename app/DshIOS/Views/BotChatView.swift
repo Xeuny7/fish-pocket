@@ -57,9 +57,10 @@ struct BotChatView: View {
             .onDisappear { app.clearUnread(bot.sessionId) }
         } else if team.status == .unknown {
             // The app opened on this chat (the page it was last on) before the team answered.
-            ConversationLoading().background(Palette.background)
+            ConversationLoading().featurePage()
         } else {
             ContentUnavailableView("这个 Bot 已不在团队里", systemImage: "person.slash")
+                .featurePage()
         }
     }
 }
@@ -150,7 +151,7 @@ struct BotCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) { content }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.grouped, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .featurePanel(cornerRadius: 16)
     }
 }
 

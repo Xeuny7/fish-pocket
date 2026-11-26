@@ -49,6 +49,7 @@ struct BotDetailView: View {
                     }
                 } else {
                     ContentUnavailableView("这个 Bot 已不在团队里", systemImage: "person.slash")
+                        .featurePage()
                 }
             }
             .navigationTitle(team.bot(botId)?.name ?? String(localized: "Bot"))
@@ -75,14 +76,14 @@ struct BotDetailView: View {
             Button { appearanceOpen = true } label: {
                 BotAvatar(bot: bot, size: 88, live: true, previewColor: BotInk.color(colorPreview))
                     .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: "pencil").font(.system(size: 12, weight: .bold)).foregroundStyle(.primary)
+                        Image(systemName: "pencil").font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.ink)
                             .frame(width: 28, height: 28).background(Palette.grouped, in: Circle())
                             .overlay(Circle().strokeBorder(Palette.stroke, lineWidth: 1))
                     }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("更换头像")
-            if !bot.role.isEmpty { Text(bot.role).font(.subheadline).foregroundStyle(.secondary) }
+            if !bot.role.isEmpty { Text(bot.role).font(.subheadline).foregroundStyle(Palette.secondary) }
             if let doing = team.doingText(bot.id) {
                 HStack(spacing: 5) {
                     if team.isWorking(bot.id) { StatusDot(state: .running, size: 6) }
@@ -105,6 +106,9 @@ struct BotDetailView: View {
             .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: icon)
+                .foregroundStyle(Palette.ink)
+                .frame(minWidth: 24)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 4)
     }

@@ -89,39 +89,54 @@ struct WorkRowLabel: View {
     var busy = false
     var detail: String?
     var highlighted = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(highlighted ? tint.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 9))
+                .frame(width: 24, height: 24)
+                .background(highlighted ? tint.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(text)
-                    .font(.subheadline.weight(highlighted ? .semibold : .regular))
-                    .foregroundStyle(highlighted ? Palette.ink : Palette.secondary)
-                    .lineLimit(highlighted ? 2 : 1)
-                    .truncationMode(truncation)
-                if let detail {
-                    Text(detail).font(.footnote).foregroundStyle(Palette.secondary)
-                        .lineLimit(2).truncationMode(truncation)
+            ViewThatFits(in: .horizontal) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    HStack(spacing: 4) {
+                        title.fixedSize(horizontal: true, vertical: false)
+                        if let detail {
+                            Text("·").accessibilityHidden(true)
+                            Text(detail).lineLimit(1).truncationMode(truncation)
+                        }
+                    }
                 }
-                if let outcome { Text(outcome).font(.footnote.weight(.medium)).foregroundStyle(tint) }
+                VStack(alignment: .leading, spacing: 2) {
+                    title.lineLimit(2)
+                    if let detail { Text(detail).lineLimit(1).truncationMode(truncation) }
+                }
             }
+            .font(.footnote)
+            .foregroundStyle(Palette.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+            if let outcome {
+                Text(outcome).font(.caption).foregroundStyle(tint).lineLimit(2)
+            }
             if busy { ProgressView().controlSize(.mini) }
             Image(systemName: "chevron.right")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(Palette.faint)
+                .foregroundStyle(Palette.secondary)
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 4)
         .frame(minHeight: 44)
         .contentShape(Rectangle())
+    }
+
+    private var title: some View {
+        Text(text)
+            .fontWeight(highlighted ? .medium : .regular)
+            .foregroundStyle(highlighted ? Palette.ink : Palette.secondary)
+            .lineLimit(1)
+            .truncationMode(truncation)
     }
 }
 

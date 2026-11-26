@@ -14,7 +14,6 @@ struct ExploreTabView: View {
     @Binding var path: [Route]
     @State private var phoneControl = PhoneControlService()
     @State private var watch = WatchPairing.current
-    @State private var miniApps = MiniAppStore.shared
     /// 设置 and the pages pushed from it wear the settings look, which a page takes from the stack
     /// it is in: put on just before 设置 is pushed, taken off once the stack is back at this page,
     /// which the look does not change. Never in the same update as a push: before iOS 26 the stack,
@@ -40,13 +39,6 @@ struct ExploreTabView: View {
                     .foregroundStyle(Palette.ink)
                 } header: {
                     Text("常用设置").foregroundStyle(Palette.secondary)
-                }
-                .groupedRow()
-                Section {
-                    row(.miniApps, Text(MiniAppsPage.tabTitle), .miniApps, "与 AI 共创",
-                        status: miniApps.apps.isEmpty ? nil : String(localized: "\(miniApps.apps.count) 个 Mini App"))
-                } header: {
-                    Text("创作").foregroundStyle(Palette.secondary)
                 }
                 .groupedRow()
                 Section {
@@ -125,7 +117,7 @@ struct ExploreTabView: View {
             // the user is in another app.
             .task { await phoneControl.refresh() }
             .task { await app.account.refreshDetails() }
-            .onAppear { watch = WatchPairing.current; miniApps.refresh() }
+            .onAppear { watch = WatchPairing.current }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 watch = WatchPairing.current
@@ -173,16 +165,15 @@ struct ExploreTabView: View {
 
     private func quickLink(_ route: Route, _ title: LocalizedStringKey, _ icon: String, status: String? = nil) -> some View {
         NavigationLink(value: route) {
-            Label {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).foregroundStyle(Palette.ink)
-                    if let status { Text(status).font(.footnote).foregroundStyle(Palette.secondary) }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            } icon: {
+            entryLabel(Text(title), detail: nil, status: status, warns: false) {
                 Image(systemName: icon)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 38, height: 38)
+                    .accessibilityHidden(true)
+            } trailing: {
+                EmptyView()
             }
-            .padding(.vertical, 4)
         }
     }
 
@@ -194,11 +185,20 @@ struct ExploreTabView: View {
     /// The entry's drawn icon, the name and a line on what it is for, and what it says on the right.
     private func label(_ title: Text, _ icon: ExploreGlyph.Kind, _ detail: Text, status: String? = nil, warns: Bool = false,
                        @ViewBuilder trailing: () -> some View) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+        entryLabel(title, detail: detail, status: status, warns: warns) {
             ExploreGlyph(kind: icon)
+        } trailing: {
+            trailing()
+        }
+    }
+
+    private func entryLabel(_ title: Text, detail: Text?, status: String?, warns: Bool,
+                            @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
+        HStack(spacing: 14) {
+            icon()
             VStack(alignment: .leading, spacing: 4) {
                 title.font(.body).foregroundStyle(Palette.ink)
-                detail.font(.footnote).foregroundStyle(Palette.secondary)
+                if let detail { detail.font(.footnote).foregroundStyle(Palette.secondary) }
                 if let status {
                     Text(status).font(.footnote).foregroundStyle(warns ? Palette.waiting : Palette.secondary)
                 }
