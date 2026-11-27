@@ -27,6 +27,7 @@ private struct ImagePasteModifier: ViewModifier {
             // The text view becomes first responder as focus lands: one turn later it is there to find.
             DispatchQueue.main.async {
                 guard let view = UIResponder.focusedTextView else { return }
+                ReturnKey.attach(to: view, composer: composer)
                 ImagePaste.attach(to: view, accepts: { true }) { pasted in
                     switch pasted {
                     case .image(let data):
@@ -153,6 +154,24 @@ enum ImagePaste {
     }
 }
 
+private extension UIKey {
+    @MainActor var kuroCatKey: KuroCatKey? {
+        guard modifierFlags.intersection([.command, .control, .alternate]).isEmpty else { return nil }
+        switch keyCode {
+        case .keyboardReturnOrEnter, .keypadEnter: return KuroCatKey(legend: "↵")
+        case .keyboardDeleteOrBackspace: return KuroCatKey(legend: "⌫")
+        case .keyboardEscape: return KuroCatKey(legend: "ESC")
+        case .keyboardUpArrow: return KuroCatKey(legend: "↑")
+        case .keyboardDownArrow: return KuroCatKey(legend: "↓")
+        case .keyboardLeftArrow: return KuroCatKey(legend: "←")
+        case .keyboardRightArrow: return KuroCatKey(legend: "→")
+        default:
+            guard charactersIgnoringModifiers.count == 1, let character = charactersIgnoringModifiers.first else { return nil }
+            return KuroCatKey(character: character)
+        }
+    }
+}
+
 /// A hardware keyboard's Return sends, as it does on the web: Shift- or Option-Return adds a
 /// line, and a Return that ends an input method's composition (pinyin's letters, kana) stays
 /// the input method's. The on-screen keyboard's return key types a line break as before: it
@@ -193,27 +212,36 @@ enum ReturnKey {
     }
 
     private final class Target {
-        let action: Action
+        var action: Action?
+        weak var composer: ComposerModel?
         /// Presses whose start went to the action: their end is not the text view's either.
         var taken: Set<ObjectIdentifier> = []
         /// Presses that ended a composition: their end goes where their start went.
         var composing: Set<ObjectIdentifier> = []
-        init(action: Action) { self.action = action }
     }
 
     nonisolated(unsafe) private static var targetKey: UInt8 = 0
     nonisolated(unsafe) private static var patched: Set<ObjectIdentifier> = []
 
     @MainActor
-    static func attach(to view: UITextView, action: Action) {
-        objc_setAssociatedObject(view, &targetKey, Target(action: action), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    static func attach(to view: UITextView, action: Action? = nil, composer: ComposerModel? = nil) {
+        let target = objc_getAssociatedObject(view, &targetKey) as? Target ?? Target()
+        if let action { target.action = action }
+        if let composer { target.composer = composer }
+        objc_setAssociatedObject(view, &targetKey, target, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         let cls: AnyClass? = object_getClass(view)
         guard let cls, patched.insert(ObjectIdentifier(cls)).inserted else { return }
+        observeComposition(on: cls)
         patch(cls, #selector(UIResponder.pressesBegan(_:with:))) { this, presses, plain in
             guard let target = objc_getAssociatedObject(this, &targetKey) as? Target,
-                  let textView = this as? UITextView,
+                  let textView = this as? UITextView, textView.isFirstResponder,
                   presses.count == 1, let press = presses.anyObject() as? UIPress,
-                  let key = press.key, key.keyCode == .keyboardReturnOrEnter || key.keyCode == .keypadEnter else { return false }
+                  let key = press.key else { return false }
+            if let composer = target.composer, let keycap = key.kuroCatKey {
+                composer.showKuroCatKey(keycap)
+            }
+            guard let action = target.action,
+                  key.keyCode == .keyboardReturnOrEnter || key.keyCode == .keypadEnter else { return false }
             if textView.markedTextRange != nil {
                 // Return during a composition is the input method's: pinyin puts the letters in,
                 // as on a Mac. SwiftUI's own handling would take it as a submit, end editing and
@@ -224,7 +252,7 @@ enum ReturnKey {
             }
             let held = key.modifierFlags.intersection([.shift, .alternate, .command, .control])
             if held.isEmpty {
-                target.action.run()
+                action.run()
             } else if held.isSubset(of: [.shift, .alternate]) {
                 // What the on-screen return key does.
                 textView.insertText("\n")
@@ -245,6 +273,26 @@ enum ReturnKey {
                 return target.taken.remove(ObjectIdentifier(press)) != nil
             }
         }
+    }
+
+    /// Observe the public UITextInput composition call without replacing the editor or its delegate.
+    @MainActor
+    private static func observeComposition(on cls: AnyClass) {
+        let selector = #selector(UITextInput.setMarkedText(_:selectedRange:))
+        guard let method = class_getInstanceMethod(cls, selector) else { return }
+        typealias SetMarked = @convention(c) (AnyObject, Selector, NSString?, NSRange) -> Void
+        let original = unsafeBitCast(method_getImplementation(method), to: SetMarked.self)
+        let block: @convention(block) (AnyObject, NSString?, NSRange) -> Void = { this, value, range in
+            if let target = objc_getAssociatedObject(this, &targetKey) as? Target,
+               let view = this as? UITextView, view.isFirstResponder, let value {
+                let previous = view.markedTextRange.flatMap { view.text(in: $0) } ?? ""
+                if let key = KuroCatKey.composition(from: previous, to: value as String) {
+                    target.composer?.showKuroCatCompositionKey(key)
+                }
+            }
+            original(this, selector, value, range)
+        }
+        class_replaceMethod(cls, selector, imp_implementationWithBlock(block), method_getTypeEncoding(method))
     }
 
     /// `take` answers whether the presses are dealt with; otherwise the class's own handling runs.

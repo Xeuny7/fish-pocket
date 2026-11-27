@@ -16,6 +16,27 @@ final class SessionModel {
     private(set) var hasItems = false
     private(set) var live: [AssistantBlock] = []
     private(set) var running = false
+    private(set) var deskPetCompletion: Int?
+    private(set) var deskPetLiveAfter = -1
+    @ObservationIgnored private var seenDeskPetCompletion = -1
+
+    func consumeDeskPetCompletion(_ seq: Int) -> Bool {
+        guard seq > seenDeskPetCompletion else { return false }
+        seenDeskPetCompletion = seq
+        return true
+    }
+    private var replyInbox: [String: [JSON]] = [:]
+
+    var deskPetWorking: Bool {
+        running || composer.hasUnacknowledgedPrompt || replyInbox.values.contains { lane in
+            lane.contains { $0["source"]["kind"].string == "user" || $0["source"]["kind"].isNull }
+        }
+    }
+
+    func clearDeskPetCompletion() {
+        if deskPetCompletion != nil { deskPetCompletion = nil }
+    }
+
     private(set) var title: String?
     private(set) var todos: [TodoItem] = []
     /// Rows of the `userQuestions` projection that continued unanswered.
@@ -159,7 +180,13 @@ final class SessionModel {
             // A long turn's start can lie before the window: the session list still knows it runs.
             refold(running: app.sessions[sessionId]?.running ?? false)
             cursor = frame["cursor"].int ?? -1
-            applyProjections(frame["projections"]["values"], permissionRevision: revision)
+            deskPetLiveAfter = cursor
+            clearDeskPetCompletion()
+            let values = frame["projections"]["values"]
+            let inbox = values["inbox"]
+            replyInbox = ["next-turn": inbox["next-turn"].array, "next-step": inbox["next-step"].array]
+            composer.acknowledgeQueuedPrompts(replyInbox.values.flatMap { $0 })
+            applyProjections(values, permissionRevision: revision)
             resetLive()
             snapshotThrough = timeline.items.reduce(0) { last, item in if case .user(let seq, _, _, _) = item { max(last, seq) } else { last } }
             publishTimeline()
@@ -172,6 +199,7 @@ final class SessionModel {
             composer.observe(event)
             events.append(event)
             if timeline.apply(event) { publishTimeline() } else { publishTimelineState() }
+            updateDeskPet(event, seq: seq)
             // Live only: recording what the agent does in other apps starts and stops with its turn.
             if subagentAddress == nil {
                 PhoneRecorder.shared.observe(event, session: sessionId, request: items.lastUserText)
@@ -216,10 +244,36 @@ final class SessionModel {
         }
     }
 
+    private func updateDeskPet(_ event: JSON, seq: Int) {
+        let data = event["data"]
+        switch event["type"].string {
+        case "agent/inbox/spliced":
+            guard let lane = data["target"].string, lane == "next-turn" || lane == "next-step" else { return }
+            let inserted = data["inserted"].array
+            var messages = replyInbox[lane] ?? []
+            let start = min(messages.count, max(0, data["start"].int ?? 0))
+            let count = min(messages.count - start, max(0, data["removedCount"].int ?? 0))
+            messages.replaceSubrange(start..<(start + count), with: inserted)
+            replyInbox[lane] = messages
+            composer.acknowledgeQueuedPrompts(inserted)
+            if deskPetWorking { clearDeskPetCompletion() }
+        case "turn/start":
+            clearDeskPetCompletion()
+        case "turn/end":
+            // The durable end is authoritative even if an assistant-stream end arrives later.
+            resetLive()
+            publishTimelineState()
+            deskPetCompletion = data["reason"]["kind"].string == "completed" && !deskPetWorking ? seq : nil
+        default:
+            break
+        }
+    }
+
     /// Live assistant output between attempt start and its durable `assistant/message`.
     private func applyStream(_ frame: JSON) {
         switch frame["type"].string {
         case "start":
+            clearDeskPetCompletion()
             resetLive()
             liveAttempt = frame["attemptId"].string
             running = true

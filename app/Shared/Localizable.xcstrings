@@ -273,6 +273,108 @@
         }
       }
     },
+    "桌宠外观" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desk pet appearance"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aspecto de la mascota"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクペットの外観"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 펫 모양"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌寵外觀"
+          }
+        }
+      }
+    },
+    "软耳兔" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Floppy-eared Rabbit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conejo de orejas caídas"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "たれ耳ウサギ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "늘어진 귀 토끼"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "軟耳兔"
+          }
+        }
+      }
+    },
+    "KuroCat 小黑猫" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KuroCat · Black Cat"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KuroCat · Gato negro"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KuroCat・黒猫"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KuroCat · 검은 고양이"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KuroCat 小黑貓"
+          }
+        }
+      }
+    },
     "显示桌宠" : {
       "localizations" : {
         "en" : {
@@ -477,36 +579,36 @@
         }
       }
     },
-    "桌宠只在本机聊天画布内显示。拖动它可改变位置。" : {
+    "桌宠显示在本机会话和 Bot 聊天中。拖动它可改变位置。" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The desk pet appears in local conversations. Drag it to move it."
+            "value" : "The desk pet appears in local conversations and Bot chats. Drag it to move it."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La mascota aparece en las conversaciones locales. Arrástrala para moverla."
+            "value" : "La mascota aparece en las conversaciones locales y los chats con bots. Arrástrala para moverla."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "デスクペットはこの端末の会話に表示されます。ドラッグして移動できます。"
+            "value" : "デスクペットはローカル会話と Bot チャットに表示されます。ドラッグして移動できます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "데스크톱 펫은 로컬 대화에 표시됩니다. 드래그하여 위치를 옮길 수 있습니다."
+            "value" : "데스크 펫은 로컬 대화와 봇 채팅에 표시됩니다. 드래그해서 옮길 수 있습니다."
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "桌寵會顯示在本機對話中，拖曳即可移動。"
+            "value" : "桌寵顯示在本機對話和 Bot 聊天中。拖曳即可移動。"
           }
         }
       }

@@ -56,6 +56,8 @@ targets:
         type: folder
         buildPhase: resources
       - path: Shared
+      - path: ../THIRD_PARTY_NOTICES.md
+        buildPhase: resources
       # What the phone sends the watch and what the watch sends back.
       - path: WatchShared
       # Built by scripts/build-engine.sh; copied into the bundle as-is.

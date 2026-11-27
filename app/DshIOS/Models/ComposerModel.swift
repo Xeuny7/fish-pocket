@@ -192,6 +192,41 @@ final class ComposerModel {
     @ObservationIgnored let app: AppModel
 
     var text: String { didSet { if text != oldValue { persistDraft() } } }
+    private(set) var kuroCatStroke = KuroCatStroke()
+    @ObservationIgnored private var lastHardwareKey: ContinuousClock.Instant?
+    @ObservationIgnored private var lastObservedKey: ContinuousClock.Instant?
+
+    func showKuroCatKey(_ key: KuroCatKey) {
+        guard PetDefaults.kuroCatEnabled else { return }
+        lastHardwareKey = .now
+        lastObservedKey = .now
+        animateKuroCat(key)
+    }
+
+    func showKuroCatCompositionKey(_ key: KuroCatKey) {
+        guard PetDefaults.kuroCatEnabled else { return }
+        if let lastHardwareKey, lastHardwareKey.duration(to: .now) < .milliseconds(80) { return }
+        lastObservedKey = .now
+        animateKuroCat(key)
+    }
+
+    func editDraft(_ value: String) {
+        let previous = text
+        guard value != previous else { return }
+        text = value
+        guard PetDefaults.kuroCatEnabled else { return }
+        if let observed = lastObservedKey, observed.duration(to: .now) < .milliseconds(80) {
+            lastObservedKey = nil
+            return
+        }
+        if let key = KuroCatKey.singleEdit(from: previous, to: value) {
+            animateKuroCat(key)
+        }
+    }
+
+    private func animateKuroCat(_ key: KuroCatKey) {
+        kuroCatStroke = KuroCatStroke(revision: kuroCatStroke.revision &+ 1, key: key)
+    }
     /// Text quoted from the conversation, in the order added. Each is sent as a blockquote ahead of
     /// the text (`MessageQuotes.compose`) and kept with the draft (C-92).
     private(set) var quotes: [String] = [] { didSet { if quotes != oldValue { persistDraft() } } }
@@ -348,6 +383,21 @@ final class ComposerModel {
         }
     }
 
+    private var acknowledgedPrompts: Set<String> = []
+
+    var hasUnacknowledgedPrompt: Bool {
+        pending.contains { !acknowledgedPrompts.contains($0.id) }
+    }
+
+    func acknowledgeQueuedPrompts(_ items: [JSON]) {
+        let local = Set(pending.map(\.id))
+        let accepted = items.compactMap { item in
+            item["source"]["rpcId"].string ?? item["source"]["requestId"].string
+        }
+        let updated = acknowledgedPrompts.union(accepted.filter(local.contains))
+        if updated != acknowledgedPrompts { acknowledgedPrompts = updated }
+    }
+
     /// Local echoes still waiting: queued ones until the queue row arrives, the others until their message.
     /// One that is on screen as its bubble has nothing left to say here.
     var visiblePending: [PendingSubmission] {
@@ -502,6 +552,7 @@ final class ComposerModel {
             }
             app.bubbleRises()
         }
+        session?.clearDeskPetCompletion()
         pending.append(submission)
         // Sending the restored text consumes the failures it held.
         if restoredText != nil { failedDrafts.removeAll(); restoredText = nil; restoredQuotes = [] }
@@ -665,6 +716,7 @@ final class ComposerModel {
 
     private func retire(_ requestId: String) {
         pending.removeAll { $0.id == requestId }
+        if acknowledgedPrompts.contains(requestId) { acknowledgedPrompts.remove(requestId) }
     }
 
     // MARK: Errors (C-85)

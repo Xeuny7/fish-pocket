@@ -93,15 +93,19 @@ private struct SettingsList: View {
             }
             .settingsRows()
 
-            Section {
-                NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
-                if mirror.serves("permission") { permissionPicker }
-            } header: {
-                Text("模型与权限")
-            } footer: {
-                if savingSettings.contains("permission") { settingsSaving }
+            if !pushed || mirror.serves("permission") {
+                Section {
+                    if !pushed {
+                        NavigationLink { ModelProvidersPage() } label: { row("模型", "cpu", defaultModel ?? "") }
+                    }
+                    if mirror.serves("permission") { permissionPicker }
+                } header: {
+                    Text(pushed ? LocalizedStringKey("权限") : LocalizedStringKey("模型与权限"))
+                } footer: {
+                    if savingSettings.contains("permission") { settingsSaving }
+                }
+                .settingsRows()
             }
-            .settingsRows()
 
             Section {
                 NavigationLink { VoiceInputSettingsPage() } label: {
@@ -225,7 +229,7 @@ private struct SettingsList: View {
 
             Section {
                 NavigationLink { AdvancedSettingsPage() } label: { row("高级", "wrench.and.screwdriver") }
-                NavigationLink { AboutPage(engineVersion: engineVersion) } label: { row("关于", "info.circle", aboutValue) }
+                NavigationLink { AboutPage() } label: { row("关于", "info.circle", aboutValue) }
                 // An archived conversation must be restored before it can open.
                 NavigationLink { DrawerView.archive() } label: {
                     let count = DrawerView.archivedCount(app)
@@ -339,6 +343,7 @@ private struct SettingsList: View {
 
     /// What the rows show that depends on settings.
     private func loadDerived() async {
+        guard !pushed else { return }
         if let value = try? await app.client.call("session/modelCatalog") {
             let provider = value["default"]["provider"].string, model = value["default"]["model"].string
             let group = value["groups"].array.first { $0["id"].string == provider }
@@ -502,20 +507,14 @@ private struct UpdateRow: View {
     }
 }
 
-/// 设置 → 关于: versions, storage and how the engine is doing.
+/// 设置 → 关于: app and system versions, updates and storage.
 private struct AboutPage: View {
     @Environment(AppModel.self) private var app
-    @EnvironmentObject private var engine: NodeEngine
-    let engineVersion: String?
     @State private var storage: Int64?
 
     var body: some View {
         List {
-            Section { EngineCard() }
-            .groupedRow()
             Section {
-                LabeledContent("引擎", value: "DeepSeek Harness")
-                if let engineVersion { LabeledContent("引擎版本", value: engineVersion) }
                 if let bot = app.botTeam.installedPackage {
                     Link(destination: BotModel.projectURL) {
                         LabeledContent("Bot 插件", value: "DS Bot \(bot.version ?? "")")

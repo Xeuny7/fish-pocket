@@ -105,3 +105,31 @@ libgit2 的完整许可证见其仓库的 [COPYING](https://github.com/libgit2/l
 - **官方 Web UI：** `docs/webui/` 的功能清单和协议说明，以及原生界面的部分文案和行为，整理或移植自 `@deepseek-ai/*`（MIT，Copyright (c) 2026 DeepSeek）。
 - **DSH Go：** AGPL-3.0。本项目参考过它的方案和协议，没有使用它的代码。
 - **Agents Anywhere：** Apache-2.0，Copyright 2026 Agents Anywhere Contributors。远程控制（`app/DshIOS/Remote/`）对接它的服务器接口，事件合并、斜杠指令和交互表单的处理规则参照它公开的 iOS 客户端重新实现。App 不捆绑它的任何组件，电脑端和服务器由用户自己安装或部署。
+
+## KuroCat 桌宠
+
+小黑猫的离线动画帧由 [KuroCat v1.5.2](https://github.com/chanke17/KuroCat/tree/v1.5.2) 的 Canvas 渲染器和经典黑猫皮肤生成。动画在应用内由 SwiftUI 播放。
+
+```text
+MIT License
+
+Copyright (c) 2026 chanke17
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

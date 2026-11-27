@@ -269,10 +269,11 @@ struct ComposerView: View {
             if let trigger {
                 CandidatePanel(model: model, context: context, hit: trigger, pick: { pick($0, over: trigger) }, showAll: { refocus = true; browsing = trigger },
                                onReturn: { panelReturn = $0 })
+                    .deskPetObstacle()
                     .padding(.bottom, 6)
             }
             if voice.phase == .idle, !context.permissionOptions.isEmpty {
-                permissionBar.padding(.leading, 5)
+                permissionBar.deskPetObstacle().padding(.leading, 5)
             }
             field
                 // While held, the bar's own fill over the surface: the waveform's ink, red to cancel.
@@ -285,6 +286,7 @@ struct ComposerView: View {
                 .animation(voice.holding ? nil : .snappy(duration: 0.18), value: voice.phase)
                 .animation(.snappy(duration: 0.18), value: voice.cancelArmed)
                 .composerSurface()
+                .deskPetObstacle()
         }
         .task(id: pendingDraft) {
             guard let pendingDraft else { return }
@@ -506,7 +508,7 @@ struct ComposerView: View {
     private var input: some View {
         // Between three lines and four, whatever the text size.
         let threeLines = UIFont.preferredFont(forTextStyle: .body).lineHeight * 3.5
-        return TextField(placeholder, text: Bindable(composer).text, axis: .vertical)
+        return TextField(placeholder, text: composerDraftBinding(composer), axis: .vertical)
             .font(.body)
             .lineLimit(1...5)
             .focused($focused)
@@ -1071,9 +1073,14 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
+@MainActor
+private func composerDraftBinding(_ composer: ComposerModel) -> Binding<String> {
+    Binding(get: { composer.text }, set: { composer.editDraft($0) })
+}
+
 /// The draft on a page of its own, for text too long for the input.
 private struct DraftEditor: View {
-    @Bindable var composer: ComposerModel
+    let composer: ComposerModel
     let send: () -> Void
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -1084,7 +1091,8 @@ private struct DraftEditor: View {
                 QuoteRail(quotes: composer.quotes) { composer.removeQuote(at: $0) }
                     .padding(.horizontal, 17)
                     .padding(.top, composer.quotes.isEmpty ? 0 : 8)
-                TextEditor(text: $composer.text)
+                DraftDeskPet(stroke: composer.kuroCatStroke)
+                TextEditor(text: composerDraftBinding(composer))
                     .font(.body)
                     .inkTint()
                     .focused($focused)

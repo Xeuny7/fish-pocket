@@ -289,6 +289,7 @@ struct ConversationView: View {
                                 scrollToBottom(proxy)
                             }
                         }
+                        .deskPetObstacle()
                         .padding(.trailing, 16)
                         .padding(.bottom, 12)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
@@ -305,6 +306,7 @@ struct ConversationView: View {
                         openBrowser: openBrowser,
                         openJobs: { headerSheet = .jobs }
                     )
+                    .deskPetObstacle()
                     .padding(.leading, 16)
                     .padding(.bottom, 12)
                 }
@@ -322,17 +324,13 @@ struct ConversationView: View {
             }
         }
         .overlay { if blank { hero } }
-        .overlay {
-            if bot == nil, model.subagentAddress == nil, presentedInteractionId(model) == nil {
-                DeskPetLayer(model: model, reserveActivityCorner: !blank && hasTools,
-                             reserveScrollCorner: !blank && !atBottom, keyboardUp: keyboardUp)
-            }
-        }
         // Above the composer: the transcript and the ✕ while the bar is held to talk.
         .overlay { VoiceHoldOverlay(voice: model.composer.voice) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                if let accessory = bot?.accessory { accessory.padding(.bottom, 8) }
+                if let accessory = bot?.accessory {
+                    accessory.deskPetObstacle().padding(.bottom, 8)
+                }
                 ComposerStatusBar(
                     model: model, keyboardUp: keyboardUp,
                     waiting: waitingInteraction(model).map { $0.isApproval ? String(localized: "等你允许") : String(localized: "等你回答") },
@@ -340,6 +338,7 @@ struct ConversationView: View {
                     interactionArrived: interactions(model).contains { !deferred.contains($0.id) },
                     sheetUp: $inputSheetUp
                 )
+                .deskPetObstacle()
                 if let notice = model.subagentReadOnly(parentAvailable: parentAvailable(model)) {
                     SubagentReadOnlyNotice(title: notice.title, detail: notice.detail)
                 } else {
@@ -363,6 +362,12 @@ struct ConversationView: View {
             .padding(.bottom, 8)
             .readableWidth()
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { app.composerHeight = $0 }
+        }
+        .overlayPreferenceValue(DeskPetObstacles.self) { obstacles in
+            if model.subagentAddress == nil, presentedInteractionId(model) == nil {
+                DeskPetLayer(model: model, obstacles: obstacles, covered: inputSheetUp)
+                    .id(model.sessionId)
+            }
         }
         .background { AppBackground().ignoresSafeArea(.container) }
         .modifier(ComposerDrop(composer: model.composer, enabled: model.subagentReadOnly(parentAvailable: parentAvailable(model)) == nil))
