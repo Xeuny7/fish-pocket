@@ -4,7 +4,7 @@ import WatchConnectivity
 /// Account access, frequently used settings and tools in the 探索 tab.
 struct ExploreTabView: View {
     enum Route: Hashable {
-        case account, models, schedules, installedPlugins, settings, deskPet
+        case account, models, schedules, settings, deskPet
         case miniApps, plugins, connectors, phoneControl, remote, watch, shortcuts, share
     }
 
@@ -28,8 +28,8 @@ struct ExploreTabView: View {
                 }
                 .groupedRow()
                 Section {
-                    quickLink(.models, "模型", "cpu")
-                    quickLink(.deskPet, "桌宠", "pawprint")
+                    settingsLink(.models, "模型", .models)
+                    settingsLink(.deskPet, "桌宠", .deskPet)
                     // A button, not a link: the look goes on first and 设置 is pushed after it
                     // (`openSettings`), so the chevron is drawn here as a link's would be.
                     Button(action: openSettings) {
@@ -38,21 +38,20 @@ struct ExploreTabView: View {
                         }
                     }
                     .foregroundStyle(Palette.ink)
+                    .groupedRow()
                 } header: {
                     Text("常用设置").foregroundStyle(Palette.secondary)
                 }
-                .groupedRow()
                 Section {
                     row(.plugins, Text("插件市场"), .plugins, "查找和安装插件")
-                    quickLink(.installedPlugins, "已安装插件", "puzzlepiece.extension")
                     row(.connectors, Text("连接器"), .connectors, "GitHub、Notion 等服务和本机能力", status: connectorStatus)
                 } header: {
                     Text("扩展智能体").foregroundStyle(Palette.secondary)
                 }
                 .groupedRow()
                 Section {
-                    quickLink(.schedules, "自动化", "clock.arrow.2.circlepath",
-                              status: app.scheduleCount.map { String(localized: "\($0) 个") })
+                    settingsLink(.schedules, "自动化", .schedules,
+                                 status: app.scheduleCount.map { String(localized: "\($0) 个") })
                     row(.phoneControl, Text("操控手机"), .phoneControl, "让智能体点按其他 App", status: phoneControl.state == .running ? String(localized: "运行中") : nil,
                         live: phoneControl.state == .running)
                     row(.remote, Text("远程控制"), .remote, "在手机上管电脑里的智能体", status: remoteStatus,
@@ -102,7 +101,6 @@ struct ExploreTabView: View {
                 case .account: AccountPage().settingsStyle()
                 case .models: ModelProvidersPage().settingsStyle()
                 case .schedules: SchedulesView(openSession: openSession.map { open in { open($0) } }).settingsStyle()
-                case .installedPlugins: PluginsView().settingsStyle()
                 case .miniApps: MiniAppsPage()
                 case .plugins: PluginStoreView()
                 case .connectors: BotConnectorsPage().settingsStyle()
@@ -165,18 +163,23 @@ struct ExploreTabView: View {
         }
     }
 
-    private func quickLink(_ route: Route, _ title: LocalizedStringKey, _ icon: String, status: String? = nil) -> some View {
-        NavigationLink(value: route) {
+    private func settingsLink(_ route: Route, _ title: LocalizedStringKey, _ icon: ExploreGlyph.Kind,
+                              status: String? = nil) -> some View {
+        let selected = path.first == route
+        return NavigationLink(value: route) {
             entryLabel(Text(title), detail: nil, status: status, warns: false) {
-                Image(systemName: icon)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Palette.ink)
-                    .frame(width: 38, height: 38)
-                    .accessibilityHidden(true)
+                ExploreGlyph(kind: icon)
             } trailing: {
-                EmptyView()
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Palette.link)
+                        .accessibilityHidden(true)
+                }
             }
         }
+        .groupedRow(highlighted: selected)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     /// The mark of the rows that leave the page: the web version and the links at the foot.
@@ -225,7 +228,7 @@ private struct ExploreAccountRow: View {
             : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
         layout {
             AccountAvatar(url: avatarURL, size: 46)
-            VStack(alignment: .leading, spacing: 5) {
+            ExploreAccountFlow {
                 Text("DeepSeek 账号")
                     .font(.headline)
                     .foregroundStyle(Palette.ink)
@@ -235,6 +238,7 @@ private struct ExploreAccountRow: View {
                 if account.signedIn { balances }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
@@ -258,6 +262,18 @@ private struct ExploreAccountRow: View {
 
     @ViewBuilder
     private var balances: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            primaryBalance
+            if let amount = formattedWalletAmounts(account.bonusWallets) {
+                Text("赠金余额 \(amount)")
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(Palette.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var primaryBalance: some View {
         if let amount = formattedWalletAmounts(account.wallets ?? []) {
             Text("充值余额 \(amount)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
@@ -267,11 +283,49 @@ private struct ExploreAccountRow: View {
                 .font(.footnote)
                 .foregroundStyle(Palette.secondary)
         }
-        if let amount = formattedWalletAmounts(account.bonusWallets) {
-            Text("赠金余额 \(amount)")
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(Palette.secondary)
+    }
+}
+
+/// Keep the account fields in order, wrapping before a field when its full text needs more room.
+private struct ExploreAccountFlow: Layout {
+    private let spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let (size, _) = arrange(subviews, width: proposal.width)
+        return size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let (_, fields) = arrange(subviews, width: proposal.width ?? bounds.width)
+        for (subview, field) in zip(subviews, fields) {
+            subview.place(at: CGPoint(x: bounds.minX + field.minX, y: bounds.minY + field.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: field.width, height: nil))
         }
     }
 
+    private func arrange(_ subviews: Subviews, width: CGFloat?) -> (CGSize, [CGRect]) {
+        let limit = width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var widest: CGFloat = 0
+        var fields: [CGRect] = []
+
+        for subview in subviews {
+            let ideal = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + spacing + ideal.width > limit {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            let fieldWidth = min(ideal.width, limit)
+            let size = subview.sizeThatFits(ProposedViewSize(width: fieldWidth, height: nil))
+            if x > 0 { x += spacing }
+            fields.append(CGRect(x: x, y: y, width: fieldWidth, height: size.height))
+            x += fieldWidth
+            widest = max(widest, x)
+            rowHeight = max(rowHeight, size.height)
+        }
+        return (CGSize(width: widest, height: y + rowHeight), fields)
+    }
 }

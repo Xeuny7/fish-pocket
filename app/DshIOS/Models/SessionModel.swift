@@ -192,6 +192,7 @@ final class SessionModel {
             publishTimeline()
             loaded = true
             error = nil
+            app.deskPetCreation.inspect(self, in: app)
         case "event":
             let event = frame["event"]
             guard let seq = event["seq"].int, seq > cursor else { return }
@@ -200,6 +201,11 @@ final class SessionModel {
             events.append(event)
             if timeline.apply(event) { publishTimeline() } else { publishTimelineState() }
             updateDeskPet(event, seq: seq)
+            switch event["type"].string {
+            case "turn/start", "turn/end", "agent/inbox/spliced":
+                app.deskPetCreation.inspect(self, in: app)
+            default: break
+            }
             // Live only: recording what the agent does in other apps starts and stops with its turn.
             if subagentAddress == nil {
                 PhoneRecorder.shared.observe(event, session: sessionId, request: items.lastUserText)
@@ -260,6 +266,8 @@ final class SessionModel {
         case "turn/start":
             clearDeskPetCompletion()
         case "turn/end":
+            // Publish the terminal status even when there is no assistant row to update.
+            if turnInfo != timeline.turnInfo { turnInfo = timeline.turnInfo }
             // The durable end is authoritative even if an assistant-stream end arrives later.
             resetLive()
             publishTimelineState()

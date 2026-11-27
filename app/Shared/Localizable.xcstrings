@@ -1,6 +1,244 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
+    "导入宠物" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import Pet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar mascota"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペットを読み込む"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "펫 가져오기"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匯入寵物"
+          }
+        }
+      }
+    },
+    "用 AI 创建宠物" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create a Pet with AI"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crear una mascota con IA"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AIでペットを作成"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI로 펫 만들기"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用 AI 建立寵物"
+          }
+        }
+      }
+    },
+    "宠物已加入桌宠外观" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pet added to appearances"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mascota añadida a las apariencias"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ペットを外観一覧に追加しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "펫 외관 목록에 추가했습니다"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寵物已加入桌寵外觀"
+          }
+        }
+      }
+    },
+    "未收到可用的宠物素材。可在此会话重试。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No usable pet was received. You can try again in this conversation."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se recibió una mascota válida. Puedes intentarlo de nuevo en esta conversación."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用できるペット素材を受け取れませんでした。この会話で再試行できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용할 수 있는 펫 소재를 받지 못했습니다. 이 대화에서 다시 시도할 수 있습니다."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未收到可用的寵物素材。可在此對話中重試。"
+          }
+        }
+      }
+    },
+    "AI 桌宠" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI Pet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mascota de IA"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AIペット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 펫"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 桌寵"
+          }
+        }
+      }
+    },
+    "请选择 16 MB 以内、边长不超过 4096 像素的 PNG、JPEG、GIF 或 WebP 图片。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a PNG, JPEG, GIF, or WebP image up to 16 MB and 4096 pixels on each side."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige una imagen PNG, JPEG, GIF o WebP de hasta 16 MB y 4096 píxeles por lado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "16 MB以内、各辺4096ピクセル以下のPNG、JPEG、GIF、またはWebP画像を選択してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "16MB 이하이고 각 변이 4096픽셀 이하인 PNG, JPEG, GIF 또는 WebP 이미지를 선택하세요."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請選擇 16 MB 以內、邊長不超過 4096 像素的 PNG、JPEG、GIF 或 WebP 圖片。"
+          }
+        }
+      }
+    },
+    "请为我创建一只原创桌宠。优先使用可用的生图工具，生成一张主体居中、背景透明的图片。如果没有生图工具，请在最终回复中用一个 dsh-pet 代码块提供像素画 JSON：name 为宠物名称，palette 为单个 ASCII 字符到 #RRGGBB 颜色的字典，rows 为等宽字符串数组。用 . 表示透明，宽和高各为 8 至 32 像素。" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create an original desk pet for me. If an image generation tool is available, use it to make a centered subject on a transparent background. Otherwise, include pixel-art JSON in a dsh-pet code block in your final reply: name is the pet name, palette maps single ASCII characters to #RRGGBB colors, and rows is an array of equal-width strings. Use . for transparency. Width and height must each be 8 to 32 pixels."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea una mascota de escritorio original. Si hay una herramienta para generar imágenes, úsala para centrar la mascota sobre un fondo transparente. Si no, incluye JSON de arte píxel en un bloque de código dsh-pet en tu respuesta final: name es el nombre de la mascota, palette asocia caracteres ASCII individuales con colores #RRGGBB y rows es una lista de cadenas de igual longitud. Usa . para la transparencia. El ancho y el alto deben ser de 8 a 32 píxeles cada uno."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オリジナルのデスクペットを作ってください。画像生成ツールが使える場合は、透明な背景の中央にペットを配置してください。使えない場合は、最終回答の dsh-pet コードブロックにピクセルアートのJSONを入れてください。name はペット名、palette はASCII一文字から #RRGGBB 色への辞書、rows は同じ幅の文字列の配列です。透明部分は . で表し、縦横はそれぞれ8〜32ピクセルにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나만의 데스크 펫을 만들어 주세요. 이미지 생성 도구가 있으면 투명한 배경 한가운데에 펫을 배치해 주세요. 도구가 없다면 최종 답변의 dsh-pet 코드 블록에 픽셀 아트 JSON을 넣어 주세요. name은 펫 이름, palette는 한 글자 ASCII를 #RRGGBB 색상에 연결하는 사전, rows는 길이가 같은 문자열 배열입니다. 투명 부분은 .으로 표시하고 너비와 높이는 각각 8~32픽셀로 지정하세요."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請為我建立一隻原創桌寵。優先使用可用的圖片生成工具，製作一張主體置中、背景透明的圖片。如果沒有圖片生成工具，請在最終回覆中用一個 dsh-pet 程式碼區塊提供像素畫 JSON：name 為寵物名稱，palette 為單個 ASCII 字元到 #RRGGBB 色彩的字典，rows 為等寬字串陣列。用 . 表示透明，寬高各為 8 至 32 像素。"
+          }
+        }
+      }
+    },
     "查看权限" : {
       "localizations" : {
         "en" : {

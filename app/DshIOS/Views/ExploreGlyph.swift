@@ -2,13 +2,12 @@ import SwiftUI
 
 /// The 探索 page's own icons: a small scene in ink lines with one piece in the spot color, the
 /// piece that says what the entry does: the part being plugged in, the node that is lit, the
-/// phone in front of the computer. Drawn here rather than taken from SF Symbols, so the page has
-/// a look of its own, and in one color for all of them, so the page stays black and white.
+/// phone in front of the computer. The shared spot color keeps the accents consistent.
 ///
 /// Every icon is drawn on a 38-point grid and scaled to `size`.
 struct ExploreGlyph: View {
     enum Kind {
-        case miniApps, plugins, connectors, phoneControl, remote, watch, shortcuts, web, share, settings
+        case models, deskPet, miniApps, plugins, connectors, schedules, phoneControl, remote, watch, shortcuts, web, share, settings
         case rate, site, feedback, wechat, discord, follow
     }
 
@@ -20,9 +19,12 @@ struct ExploreGlyph: View {
             context.scaleBy(x: canvas.width / 38, y: canvas.height / 38)
             var pen = Pen(context: context)
             switch kind {
+            case .models: pen.models()
+            case .deskPet: pen.deskPet()
             case .miniApps: pen.miniApps()
             case .plugins: pen.plugins()
             case .connectors: pen.connectors()
+            case .schedules: pen.schedules()
             case .phoneControl: pen.phoneControl()
             case .remote: pen.remote()
             case .watch: pen.watch()
@@ -69,6 +71,31 @@ private struct Pen {
         }
     }
 
+    func models() {
+        stroke(box(9, 9, 20, 20, 4))
+        for pin in [CGFloat(14), 19, 24] {
+            stroke(lines([(pin, 5), (pin, 9)], [(pin, 29), (pin, 33)],
+                         [(5, pin), (9, pin)], [(29, pin), (33, pin)]))
+        }
+        fill(box(14.5, 14.5, 9, 9, 2))
+    }
+
+    func deskPet() {
+        stroke(dot(8, 17, 3.2))
+        stroke(dot(14.5, 10, 3.2))
+        stroke(dot(23.5, 10, 3.2))
+        stroke(dot(30, 17, 3.2))
+        fill(Path { path in
+            path.move(to: CGPoint(x: 19, y: 18))
+            path.addQuadCurve(to: CGPoint(x: 9.5, y: 28), control: CGPoint(x: 14.5, y: 18))
+            path.addQuadCurve(to: CGPoint(x: 14, y: 32), control: CGPoint(x: 8, y: 32))
+            path.addQuadCurve(to: CGPoint(x: 24, y: 32), control: CGPoint(x: 19, y: 29))
+            path.addQuadCurve(to: CGPoint(x: 28.5, y: 28), control: CGPoint(x: 30, y: 32))
+            path.addQuadCurve(to: CGPoint(x: 19, y: 18), control: CGPoint(x: 23.5, y: 18))
+            path.closeSubpath()
+        })
+    }
+
     /// A square on a circle, as the Mini Apps tab's symbol was: something made, set on a round.
     mutating func miniApps() {
         stroke(dot(15, 15, 10))
@@ -99,6 +126,14 @@ private struct Pen {
         stroke(dot(10, 27, 4))
         stroke(dot(28, 27, 4))
         fill(dot(19, 11, 4.5))
+    }
+
+    /// A clock with a colored hand and center pin.
+    func schedules() {
+        stroke(dot(19, 19, 12))
+        context.stroke(lines([(19, 12), (19, 19), (24.5, 22.5)]), with: spot,
+                       style: StrokeStyle(lineWidth: 2.6, lineCap: .round, lineJoin: .round))
+        fill(dot(19, 19, 2.1))
     }
 
     /// A phone, and a tap landing on it.

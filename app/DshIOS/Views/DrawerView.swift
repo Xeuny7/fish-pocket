@@ -107,7 +107,9 @@ struct DrawerView: View {
             Text("文件夹和会话都会保留，会话移到「未分组」。")
         }
         .sheet(isPresented: $showNewWorkspace) { NewWorkspaceView() }
-        .sheet(isPresented: $showDeskPet) { SheetStack { DeskPetSettingsPage() } }
+        .sheet(isPresented: $showDeskPet) {
+            SheetStack { DeskPetSettingsPage { showDeskPet = false } }
+        }
     }
 
     private var sidebar: some View {

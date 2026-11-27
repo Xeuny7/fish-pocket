@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum PetActivity: Int, CaseIterable {
     case resting, thinking, playing, coding, searching, celebrating
@@ -27,13 +28,37 @@ private enum PetActivity: Int, CaseIterable {
     }
 }
 
-private enum DeskPetStyle: String, CaseIterable {
-    case rabbit, kuroCat
+private enum DeskPetStyle: Equatable {
+    case rabbit, kuroCat, custom(StoredDeskPet)
 
-    var title: LocalizedStringKey {
+    static let builtIn: [Self] = [.rabbit, .kuroCat]
+
+    var id: String {
         switch self {
-        case .rabbit: "软耳兔"
-        case .kuroCat: "KuroCat 小黑猫"
+        case .rabbit: "rabbit"
+        case .kuroCat: "kuroCat"
+        case .custom(let pet): pet.id.uuidString
+        }
+    }
+
+    @MainActor
+    init(id: String, library: DeskPetLibrary) {
+        if id == Self.kuroCat.id { self = .kuroCat }
+        else if let pet = library.pets.first(where: { $0.id.uuidString == id }) { self = .custom(pet) }
+        else { self = .rabbit }
+    }
+
+    func dimensions(for side: CGFloat) -> CGSize {
+        guard case .custom(let pet) = self else { return CGSize(width: side, height: side) }
+        let edge = CGFloat(max(pet.width, pet.height))
+        return CGSize(width: side * CGFloat(pet.width) / edge, height: side * CGFloat(pet.height) / edge)
+    }
+
+    var title: Text {
+        switch self {
+        case .rabbit: Text("软耳兔")
+        case .kuroCat: Text("KuroCat 小黑猫")
+        case .custom(let pet): Text(verbatim: pet.name)
         }
     }
 
@@ -44,6 +69,8 @@ private enum DeskPetStyle: String, CaseIterable {
             PetSprite(activity: activity).transition(.identity)
         case .kuroCat:
             KuroCatSprite(activity: activity, stroke: stroke).transition(.identity)
+        case .custom(let pet):
+            CustomDeskPet(pet: pet).id(pet.id).transition(.identity)
         }
     }
 }
@@ -52,12 +79,12 @@ enum PetDefaults {
     static let style = "dsh.deskPet.style"
     static let enabled = "dsh.deskPet.enabled"
     static var kuroCatEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabled) && UserDefaults.standard.string(forKey: style) == DeskPetStyle.kuroCat.rawValue
+        UserDefaults.standard.bool(forKey: enabled) && UserDefaults.standard.string(forKey: style) == "kuroCat"
     }
     static let size = "dsh.deskPet.size"
     static let x = "dsh.deskPet.x"
     static let y = "dsh.deskPet.y"
-    static let sizes = 44.0...88.0
+    static let sizes = 44.0...176.0
     static let initialSize = 56.0
 }
 
@@ -78,34 +105,41 @@ extension View {
 /// Persist a fraction of the travel, and project it onto the nearest clear spot.
 private struct PetBounds {
     let area: CGSize
-    let side: CGFloat
+    let dimensions: CGSize
     let obstacles: [CGRect]
+    let footprint: CGRect
     private let inset: CGFloat = 8
-    private var edge: CGFloat { inset + side / 2 }
-    private var dx: CGFloat { max(0, area.width - 2 * edge) }
-    private var dy: CGFloat { max(0, area.height - 2 * edge) }
+    private var left: CGFloat { inset + dimensions.width / 2 }
+    private var top: CGFloat { inset + dimensions.height / 2 }
+    private var dx: CGFloat { max(0, area.width - 2 * left) }
+    private var dy: CGFloat { max(0, area.height - 2 * top) }
 
-    var fits: Bool { area.width >= 2 * edge && area.height >= 2 * edge }
+    var fits: Bool { area.width >= 2 * left && area.height >= 2 * top }
 
     private func clamp(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: min(edge + dx, max(edge, point.x)), y: min(edge + dy, max(edge, point.y)))
+        CGPoint(x: min(left + dx, max(left, point.x)), y: min(top + dy, max(top, point.y)))
     }
 
     func center(x: Double, y: Double) -> CGPoint? {
-        nearest(CGPoint(x: edge + dx * CGFloat(x.isFinite ? x : 0),
-                        y: edge + dy * CGFloat(y.isFinite ? y : 1)))
+        nearest(CGPoint(x: left + dx * CGFloat(x.isFinite ? x : 0),
+                        y: top + dy * CGFloat(y.isFinite ? y : 1)))
     }
 
     func nearest(_ point: CGPoint) -> CGPoint? {
         let desired = clamp(point)
-        let gap = side / 2 + 4
-        let blocked = obstacles.filter { !$0.isEmpty }.map { $0.insetBy(dx: -gap, dy: -gap) }
+        let blocked = obstacles.filter { !$0.isEmpty }.map { obstacle in
+            let gap: CGFloat = 2
+            return CGRect(x: obstacle.minX - footprint.maxX * dimensions.width - gap,
+                          y: obstacle.minY - footprint.maxY * dimensions.height - gap,
+                          width: obstacle.width + footprint.width * dimensions.width + 2 * gap,
+                          height: obstacle.height + footprint.height * dimensions.height + 2 * gap)
+        }
         func isClear(_ point: CGPoint) -> Bool {
             !blocked.contains { point.x > $0.minX && point.x < $0.maxX && point.y > $0.minY && point.y < $0.maxY }
         }
         if isClear(desired) { return desired }
-        let xs = [desired.x, edge, edge + dx] + blocked.flatMap { [$0.minX, $0.maxX] }
-        let ys = [desired.y, edge, edge + dy] + blocked.flatMap { [$0.minY, $0.maxY] }
+        let xs = [desired.x, left, left + dx] + blocked.flatMap { [$0.minX, $0.maxX] }
+        let ys = [desired.y, top, top + dy] + blocked.flatMap { [$0.minY, $0.maxY] }
         func distance(_ point: CGPoint) -> CGFloat {
             let x = point.x - desired.x
             let y = point.y - desired.y
@@ -116,8 +150,19 @@ private struct PetBounds {
     }
 
     func fractions(at center: CGPoint, x: Double, y: Double) -> (Double, Double) {
-        (dx > 0 ? Double((center.x - edge) / dx) : x,
-         dy > 0 ? Double((center.y - edge) / dy) : y)
+        (dx > 0 ? Double((center.x - left) / dx) : x,
+         dy > 0 ? Double((center.y - top) / dy) : y)
+    }
+}
+
+private struct PetHitArea: Shape {
+    let footprint: CGRect
+
+    func path(in rect: CGRect) -> Path {
+        Path(CGRect(x: rect.midX + footprint.minX * rect.width,
+                    y: rect.midY + footprint.minY * rect.height,
+                    width: footprint.width * rect.width,
+                    height: footprint.height * rect.height))
     }
 }
 
@@ -127,11 +172,11 @@ struct DeskPetLayer: View {
     let covered: Bool
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PetDefaults.enabled) private var enabled = false
-    @AppStorage(PetDefaults.style) private var style = DeskPetStyle.rabbit
+    @AppStorage(PetDefaults.style) private var style = "rabbit"
 
     var body: some View {
         if enabled && scenePhase == .active && !covered {
-            ActiveDeskPet(model: model, obstacles: obstacles, style: style)
+            ActiveDeskPet(model: model, obstacles: obstacles, style: DeskPetStyle(id: style, library: .shared))
         }
     }
 }
@@ -147,7 +192,7 @@ private struct ActiveDeskPet: View {
     @AppStorage(PetDefaults.y) private var y = 1.0
     @Environment(\.layoutDirection) private var layoutDirection
     @Namespace private var canvas
-    @GestureState private var drag: CGSize = .zero
+    @GestureState private var drag: DragGesture.Value? = nil
     @State private var celebrating: Int?
 
     private var roomRelays: [RoomRelay] {
@@ -204,16 +249,21 @@ private struct ActiveDeskPet: View {
     }
 
     private func placement(in geometry: GeometryProxy, x: Double) -> (PetBounds, CGPoint)? {
-        let available = min(geometry.size.width, geometry.size.height) - 16
+        let unit = style.dimensions(for: 1)
+        let available = min((geometry.size.width - 16) / unit.width, (geometry.size.height - 16) / unit.height)
         let preferred = size.isFinite ? min(max(size, PetDefaults.sizes.lowerBound), PetDefaults.sizes.upperBound) : PetDefaults.initialSize
         let side = min(available, CGFloat(preferred))
         let minimumSide: CGFloat = 28
         guard side >= minimumSide else { return nil }
         let blocked = obstacles.map { geometry[$0] }
 
-        // Keep the preferred size whenever the keyboard leaves a clear spot for it.
-        for candidate in [side, min(side, 44), min(side, 36), minimumSide] {
-            let bounds = PetBounds(area: geometry.size, side: candidate, obstacles: blocked)
+        // The padded atlas is larger than its visible cat and keyboard across all poses.
+        let footprint = style == .kuroCat
+            ? CGRect(x: -0.34, y: -0.29, width: 0.68, height: 0.70)
+            : CGRect(x: -0.5, y: -0.5, width: 1, height: 1)
+        let candidates = [side] + Array(stride(from: (side / 4).rounded(.down) * 4, through: minimumSide, by: -4))
+        for candidate in candidates {
+            let bounds = PetBounds(area: geometry.size, dimensions: style.dimensions(for: candidate), obstacles: blocked, footprint: footprint)
             if bounds.fits, let center = bounds.center(x: x, y: y) {
                 return (bounds, center)
             }
@@ -221,27 +271,30 @@ private struct ActiveDeskPet: View {
         return nil
     }
 
+    private func dragTarget(_ value: DragGesture.Value, origin: CGPoint) -> CGPoint {
+        CGPoint(x: origin.x + value.translation.width, y: origin.y + value.translation.height)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let physicalX = layoutDirection == .rightToLeft ? 1 - x : x
             if let (bounds, origin) = placement(in: geometry, x: physicalX) {
                 let current = activity
-                let desired = CGPoint(x: origin.x + drag.width, y: origin.y + drag.height)
+                let center = drag.flatMap { bounds.nearest(dragTarget($0, origin: origin)) } ?? origin
                 style.sprite(activity: current, stroke: model.composer.kuroCatStroke)
-                    .frame(width: bounds.side, height: bounds.side)
-                    .contentShape(Rectangle())
+                    .frame(width: bounds.dimensions.width, height: bounds.dimensions.height)
+                    .contentShape(PetHitArea(footprint: bounds.footprint))
                     .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named(canvas))
-                        .updating($drag) { value, state, _ in state = value.translation }
+                        .updating($drag) { value, state, _ in state = value }
                         .onEnded { value in
-                            let target = CGPoint(x: origin.x + value.translation.width, y: origin.y + value.translation.height)
-                            guard let end = bounds.nearest(target) else { return }
+                            guard let end = bounds.nearest(dragTarget(value, origin: origin)) else { return }
                             let (nextX, nextY) = bounds.fractions(at: end, x: physicalX, y: y)
                             x = layoutDirection == .rightToLeft ? 1 - nextX : nextX
                             y = nextY
                         })
                     .accessibilityLabel(Text("桌宠"))
                     .accessibilityValue(Text(current.title))
-                    .position(bounds.nearest(desired) ?? origin)
+                    .position(center)
             }
         }
         .coordinateSpace(name: canvas)
@@ -269,8 +322,16 @@ private struct ActiveDeskPet: View {
 }
 
 struct DeskPetSettingsPage: View {
+    private let onCreate: (() -> Void)?
+    @Environment(AppModel.self) private var app
+
+    init(onCreate: (() -> Void)? = nil) {
+        self.onCreate = onCreate
+    }
+    @State private var choosingFile = false
+    @State private var importing = false
     @AppStorage(PetDefaults.enabled) private var enabled = false
-    @AppStorage(PetDefaults.style) private var style = DeskPetStyle.rabbit
+    @AppStorage(PetDefaults.style) private var style = "rabbit"
     @AppStorage(PetDefaults.size) private var size = PetDefaults.initialSize
     @AppStorage(PetDefaults.x) private var x = 0.0
     @AppStorage(PetDefaults.y) private var y = 1.0
@@ -280,10 +341,27 @@ struct DeskPetSettingsPage: View {
             Section {
                 Toggle("显示桌宠", isOn: $enabled)
                 Picker("桌宠外观", selection: $style) {
-                    ForEach(DeskPetStyle.allCases, id: \.self) { option in
-                        Text(option.title).tag(option)
+                    ForEach(DeskPetStyle.builtIn, id: \.id) { option in
+                        option.title.tag(option.id)
+                    }
+                    ForEach(DeskPetLibrary.shared.pets) { pet in
+                        Text(verbatim: pet.name).tag(pet.id.uuidString)
                     }
                 }
+                Button { choosingFile = true } label: {
+                    Label("导入宠物", systemImage: "square.and.arrow.down")
+                }
+                .disabled(importing)
+                Button {
+                    onCreate?()
+                    app.newSessionRequest = NewSessionRequest(draft: DeskPetCreation.draft, createsDeskPet: true)
+                } label: {
+                    Label("用 AI 创建宠物", systemImage: "sparkles")
+                }
+                .disabled(app.workspaces.isEmpty)
+            }
+            .groupedRow()
+            Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("大小")
                     Slider(value: $size, in: PetDefaults.sizes, step: 4) { Text("大小") }
@@ -298,7 +376,7 @@ struct DeskPetSettingsPage: View {
                 Section {
                     HStack {
                         Spacer(minLength: 0)
-                        style.sprite(activity: .resting)
+                        DeskPetStyle(id: style, library: .shared).sprite(activity: .resting)
                             .frame(width: CGFloat(size), height: CGFloat(size))
                             .accessibilityHidden(true)
                         Spacer(minLength: 0)
@@ -312,6 +390,36 @@ struct DeskPetSettingsPage: View {
         .inkTint()
         .navigationTitle("桌宠")
         .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: DeskPetLibrary.importTypes) { result in
+            importing = true
+            Task {
+                defer { importing = false }
+                do {
+                    try await DeskPetLibrary.shared.importFile(result.get())
+                    app.showToast(String(localized: "宠物已加入桌宠外观"))
+                } catch {
+                    if (error as NSError).code != NSUserCancelledError {
+                        app.showToast(error.localizedDescription, tone: .warning)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct CustomDeskPet: View {
+    let pet: StoredDeskPet
+    @State private var image: UIImage?
+
+    var body: some View {
+        Color.clear.overlay {
+            if let image { Picture(image: image, contentMode: .fit) }
+        }
+        .task(id: pet.id) {
+            let url = DeskPetLibrary.shared.imageURL(for: pet)
+            let picture = await Task.detached(priority: .userInitiated) { DeskPetLibrary.picture(at: url) }.value
+            if !Task.isCancelled { image = picture }
+        }
     }
 }
 
@@ -496,13 +604,13 @@ private struct PetAtlas: View {
 struct DraftDeskPet: View {
     let stroke: KuroCatStroke
     @AppStorage(PetDefaults.enabled) private var enabled = false
-    @AppStorage(PetDefaults.style) private var style = DeskPetStyle.rabbit
+    @AppStorage(PetDefaults.style) private var style = "rabbit"
     @AppStorage(PetDefaults.size) private var size = PetDefaults.initialSize
 
     var body: some View {
         if enabled {
-            style.sprite(activity: .resting, stroke: stroke)
-                .frame(width: CGFloat(size), height: CGFloat(size))
+            DeskPetStyle(id: style, library: .shared).sprite(activity: .resting, stroke: stroke)
+                .frame(width: CGFloat(min(size, 72)), height: CGFloat(min(size, 72)))
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.horizontal, 12)
                 .accessibilityHidden(true)
@@ -531,6 +639,7 @@ private struct KuroCatSprite: View {
     @State private var tap: KuroCatKey?
     @State private var keyLabel: String?
     @State private var tapStart = Date()
+    @State private var pendingKeys: [KuroCatKey] = []
 
     var body: some View {
         Group {
@@ -543,29 +652,40 @@ private struct KuroCatSprite: View {
                 KuroCatActivity(activity: activity).id(activity)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if scenePhase == .active, let keyLabel {
-                Text(verbatim: keyLabel)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(Palette.field, in: RoundedRectangle(cornerRadius: 4))
-                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.stroke) }
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
+        .overlay {
+            GeometryReader { geometry in
+                if scenePhase == .active, let keyLabel {
+                    let side = min(geometry.size.width, geometry.size.height)
+                    Text(verbatim: keyLabel)
+                        .font(.system(size: min(10, side * 0.22), weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .foregroundStyle(Palette.ink)
+                        .frame(width: side * 0.34, height: side * 0.24)
+                        .background(Palette.field, in: RoundedRectangle(cornerRadius: 4))
+                        .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.stroke) }
+                        .position(x: geometry.size.width / 2 + side * 0.17, y: geometry.size.height / 2 - side * 0.17)
+                }
             }
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
         }
-        .onChange(of: stroke.revision) { _, _ in
-            guard scenePhase == .active, let key = stroke.key else { return }
-            tapStart = Date()
-            tap = reduceMotion ? nil : key
-            keyLabel = key.label
+        .onChange(of: stroke.revision) { previous, revision in
+            guard scenePhase == .active else { return }
+            pendingKeys.append(contentsOf: stroke.keys.suffix(revision &- previous))
+            if pendingKeys.count > 64 { pendingKeys.removeFirst(pendingKeys.count - 64) }
+            if tap == nil || Date().timeIntervalSince(tapStart) >= 0.085 { playNextKey() }
         }
         .task(id: tapStart) {
             guard keyLabel != nil else { return }
             do {
-                try await Task.sleep(for: .seconds(Double(KuroCatKey.frames) / PetAtlas.framesPerSecond))
+                try await Task.sleep(for: .milliseconds(85))
+                try Task.checkCancellation()
+                if !pendingKeys.isEmpty {
+                    playNextKey()
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(165))
                 try Task.checkCancellation()
                 tap = nil
                 try await Task.sleep(for: .milliseconds(350))
@@ -573,6 +693,14 @@ private struct KuroCatSprite: View {
                 keyLabel = nil
             } catch { }
         }
+    }
+
+    private func playNextKey() {
+        guard !pendingKeys.isEmpty else { return }
+        let key = pendingKeys.removeFirst()
+        tapStart = Date()
+        tap = key
+        keyLabel = key.label
     }
 }
 

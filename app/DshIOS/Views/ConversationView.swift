@@ -205,11 +205,7 @@ struct ConversationView: View {
             && model.composer.bubbles.isEmpty
     }
 
-    @ViewBuilder
-    private func content(_ model: SessionModel) -> some View {
-        let blank = isBlank(model)
-        // A conversation that has started: the bar carries its title menu, not the model picker.
-        let started = !blank && model.subagentAddress == nil && !(!model.loaded && app.sessions[sessionId]?.blank == true)
+    private func conversationCanvas(_ model: SessionModel, blank: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 TimelineRows {
@@ -362,6 +358,18 @@ struct ConversationView: View {
             .padding(.bottom, 8)
             .readableWidth()
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { app.composerHeight = $0 }
+        }
+    }
+
+    @ViewBuilder
+    private func content(_ model: SessionModel) -> some View {
+        let blank = isBlank(model)
+        // A conversation that has started: the bar carries its title menu, not the model picker.
+        let started = !blank && model.subagentAddress == nil && !(!model.loaded && app.sessions[sessionId]?.blank == true)
+        ZStack {
+            // The dock reserves space for the transcript, but the pet can use the space beside it.
+            Color.clear.allowsHitTesting(false)
+            conversationCanvas(model, blank: blank)
         }
         .overlayPreferenceValue(DeskPetObstacles.self) { obstacles in
             if model.subagentAddress == nil, presentedInteractionId(model) == nil {

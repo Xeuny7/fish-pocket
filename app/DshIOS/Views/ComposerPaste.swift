@@ -211,9 +211,30 @@ enum ReturnKey {
         var run: () -> Void = {}
     }
 
-    private final class Target {
+    @MainActor private final class Target: NSObject {
         var action: Action?
         weak var composer: ComposerModel?
+        var composition = KuroCatComposition()
+        var updatingMarkedText = false
+
+        func reportMarkedText(_ text: String?) {
+            guard PetDefaults.kuroCatEnabled, let composer else {
+                composition = KuroCatComposition()
+                return
+            }
+            let keys = composition.update(text)
+            if !keys.isEmpty { composer.showKuroCatCompositionKeys(keys) }
+        }
+
+        @objc func textDidChange(_ notification: Notification) {
+            guard !updatingMarkedText, let view = notification.object as? UITextView,
+                  view.isFirstResponder else { return }
+            reportMarkedText(view.markedTextRange.flatMap { view.text(in: $0) })
+        }
+
+        @objc func editingDidEnd(_ notification: Notification) {
+            composition = KuroCatComposition()
+        }
         /// Presses whose start went to the action: their end is not the text view's either.
         var taken: Set<ObjectIdentifier> = []
         /// Presses that ended a composition: their end goes where their start went.
@@ -227,11 +248,25 @@ enum ReturnKey {
     static func attach(to view: UITextView, action: Action? = nil, composer: ComposerModel? = nil) {
         let target = objc_getAssociatedObject(view, &targetKey) as? Target ?? Target()
         if let action { target.action = action }
-        if let composer { target.composer = composer }
+        if let composer {
+            if target.composer !== composer {
+                let center = NotificationCenter.default
+                center.removeObserver(target, name: UITextView.textDidChangeNotification, object: view)
+                center.removeObserver(target, name: UITextView.textDidEndEditingNotification, object: view)
+                center.addObserver(target, selector: #selector(Target.textDidChange(_:)),
+                                   name: UITextView.textDidChangeNotification, object: view)
+                center.addObserver(target, selector: #selector(Target.editingDidEnd(_:)),
+                                   name: UITextView.textDidEndEditingNotification, object: view)
+                target.composition = KuroCatComposition()
+            }
+            target.composer = composer
+        }
         objc_setAssociatedObject(view, &targetKey, target, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         let cls: AnyClass? = object_getClass(view)
         guard let cls, patched.insert(ObjectIdentifier(cls)).inserted else { return }
-        observeComposition(on: cls)
+        observeComposition(on: cls, selector: #selector(UITextInput.setMarkedText(_:selectedRange:)))
+        observeComposition(on: cls, selector: #selector(UITextInput.setAttributedMarkedText(_:selectedRange:)))
+        observeCompositionEnd(on: cls)
         patch(cls, #selector(UIResponder.pressesBegan(_:with:))) { this, presses, plain in
             guard let target = objc_getAssociatedObject(this, &targetKey) as? Target,
                   let textView = this as? UITextView, textView.isFirstResponder,
@@ -277,20 +312,36 @@ enum ReturnKey {
 
     /// Observe the public UITextInput composition call without replacing the editor or its delegate.
     @MainActor
-    private static func observeComposition(on cls: AnyClass) {
-        let selector = #selector(UITextInput.setMarkedText(_:selectedRange:))
+    private static func observeComposition(on cls: AnyClass, selector: Selector) {
         guard let method = class_getInstanceMethod(cls, selector) else { return }
-        typealias SetMarked = @convention(c) (AnyObject, Selector, NSString?, NSRange) -> Void
+        typealias SetMarked = @convention(c) (AnyObject, Selector, AnyObject?, NSRange) -> Void
         let original = unsafeBitCast(method_getImplementation(method), to: SetMarked.self)
-        let block: @convention(block) (AnyObject, NSString?, NSRange) -> Void = { this, value, range in
-            if let target = objc_getAssociatedObject(this, &targetKey) as? Target,
-               let view = this as? UITextView, view.isFirstResponder, let value {
-                let previous = view.markedTextRange.flatMap { view.text(in: $0) } ?? ""
-                if let key = KuroCatKey.composition(from: previous, to: value as String) {
-                    target.composer?.showKuroCatCompositionKey(key)
-                }
+        let block: @convention(block) (AnyObject, AnyObject?, NSRange) -> Void = { this, value, range in
+            guard let target = objc_getAssociatedObject(this, &targetKey) as? Target,
+                  let view = this as? UITextView, view.isFirstResponder, !target.updatingMarkedText else {
+                original(this, selector, value, range)
+                return
             }
+            target.updatingMarkedText = true
+            defer { target.updatingMarkedText = false }
+            let text = (value as? NSAttributedString)?.string ?? (value as? String)
+            target.reportMarkedText(text)
             original(this, selector, value, range)
+        }
+        class_replaceMethod(cls, selector, imp_implementationWithBlock(block), method_getTypeEncoding(method))
+    }
+
+    @MainActor
+    private static func observeCompositionEnd(on cls: AnyClass) {
+        let selector = #selector(UITextInput.unmarkText)
+        guard let method = class_getInstanceMethod(cls, selector) else { return }
+        typealias Unmark = @convention(c) (AnyObject, Selector) -> Void
+        let original = unsafeBitCast(method_getImplementation(method), to: Unmark.self)
+        let block: @convention(block) (AnyObject) -> Void = { this in
+            original(this, selector)
+            if let target = objc_getAssociatedObject(this, &targetKey) as? Target, !target.updatingMarkedText {
+                target.reportMarkedText(nil)
+            }
         }
         class_replaceMethod(cls, selector, imp_implementationWithBlock(block), method_getTypeEncoding(method))
     }

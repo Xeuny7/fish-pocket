@@ -398,7 +398,8 @@ struct MainView: View {
                 defer { waitingForNewSession = nil; if !creating { startupPending = false } }
                 let target = request.workspaceId.flatMap { id in app.workspaces.first { $0.id == id } } ?? workspace
                 if let target { workspaceId = target.id }
-                newConversation(in: target, agentPreset: request.agentPreset, draft: request.draft, prompt: request.prompt, finishesStartup: startupPending)
+                newConversation(in: target, agentPreset: request.agentPreset, draft: request.draft, prompt: request.prompt,
+                                finishesStartup: startupPending, createsDeskPet: request.createsDeskPet)
             }
         }
         .onChange(of: app.credentialRequest?.token) { _, token in
@@ -1301,7 +1302,7 @@ struct MainView: View {
     }
 
     /// Open a blank conversation in `workspace` (the engine reuses a blank one there).
-    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false, automatic: Bool = false, finishesStartup: Bool = false) {
+    private func newConversation(in workspace: Workspace?, agentPreset: String? = nil, draft: String? = nil, files: SharedFiles? = nil, prompt: String? = nil, focus: Bool = false, automatic: Bool = false, finishesStartup: Bool = false, createsDeskPet: Bool = false) {
         guard let workspace, !creating else { return }
         let revision = navigationRevision
         creating = true
@@ -1311,7 +1312,8 @@ struct MainView: View {
                 if finishesStartup { startupPending = false }
             }
             do {
-                let id = try await app.createSession(in: workspace, agentPreset: agentPreset)
+                let id = try await app.createSession(in: workspace, agentPreset: agentPreset, reuseBlank: !createsDeskPet)
+                if createsDeskPet, !id.isEmpty { app.deskPetCreation.register(id) }
                 if let draft { app.pendingDrafts[id] = draft }
                 if let files { app.pendingFiles[id] = files }
                 if let prompt { app.pendingPrompts[id] = prompt }

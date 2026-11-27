@@ -193,39 +193,38 @@ final class ComposerModel {
 
     var text: String { didSet { if text != oldValue { persistDraft() } } }
     private(set) var kuroCatStroke = KuroCatStroke()
-    @ObservationIgnored private var lastHardwareKey: ContinuousClock.Instant?
-    @ObservationIgnored private var lastObservedKey: ContinuousClock.Instant?
+    @ObservationIgnored private var hardwareStroke: (key: KuroCatKey, time: ContinuousClock.Instant)?
+    @ObservationIgnored private var observedStroke: (key: KuroCatKey, time: ContinuousClock.Instant)?
 
     func showKuroCatKey(_ key: KuroCatKey) {
         guard PetDefaults.kuroCatEnabled else { return }
-        lastHardwareKey = .now
-        lastObservedKey = .now
-        animateKuroCat(key)
+        hardwareStroke = (key, .now)
+        observedStroke = (key, .now)
+        kuroCatStroke.append(key)
     }
 
-    func showKuroCatCompositionKey(_ key: KuroCatKey) {
+    func showKuroCatCompositionKeys(_ keys: [KuroCatKey]) {
         guard PetDefaults.kuroCatEnabled else { return }
-        if let lastHardwareKey, lastHardwareKey.duration(to: .now) < .milliseconds(80) { return }
-        lastObservedKey = .now
-        animateKuroCat(key)
+        for key in keys {
+            if let stroke = hardwareStroke, stroke.key == key, stroke.time.duration(to: .now) < .milliseconds(80) {
+                hardwareStroke = nil
+                continue
+            }
+            observedStroke = (key, .now)
+            kuroCatStroke.append(key)
+        }
     }
 
     func editDraft(_ value: String) {
         let previous = text
         guard value != previous else { return }
         text = value
-        guard PetDefaults.kuroCatEnabled else { return }
-        if let observed = lastObservedKey, observed.duration(to: .now) < .milliseconds(80) {
-            lastObservedKey = nil
+        guard PetDefaults.kuroCatEnabled, let key = KuroCatKey.singleEdit(from: previous, to: value) else { return }
+        if let stroke = observedStroke, stroke.key == key, stroke.time.duration(to: .now) < .milliseconds(80) {
+            observedStroke = nil
             return
         }
-        if let key = KuroCatKey.singleEdit(from: previous, to: value) {
-            animateKuroCat(key)
-        }
-    }
-
-    private func animateKuroCat(_ key: KuroCatKey) {
-        kuroCatStroke = KuroCatStroke(revision: kuroCatStroke.revision &+ 1, key: key)
+        kuroCatStroke.append(key)
     }
     /// Text quoted from the conversation, in the order added. Each is sent as a blockquote ahead of
     /// the text (`MessageQuotes.compose`) and kept with the draft (C-92).
@@ -569,6 +568,7 @@ final class ComposerModel {
                 var content = try Self.content(for: sent)
                 if !trimmed.isEmpty { content.append(["type": "text", "text": .string(trimmed)]) }
                 try await session.prompt(content: content, steer: steer, requestId: requestId)
+                app.deskPetCreation.follow(session, in: app)
                 ShareSuggestions.didSend(in: sessionId, app: app)
                 mentions = [:]
                 // The Host has the bytes now: the private copies are done with.

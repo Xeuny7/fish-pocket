@@ -58,19 +58,48 @@ struct KuroCatKey: Equatable {
         return delta == 1 ? Self(character: changed) : Self(legend: "⌫")
     }
 
-    /// Composition is only informative when the IME exposes a simple ASCII letter edit.
-    static func composition(from previous: String, to next: String) -> Self? {
-        guard previous.utf8.allSatisfy(isPinyinByte), next.utf8.allSatisfy(isPinyinByte),
-              !next.isEmpty else { return nil }
-        return singleEdit(from: previous, to: next)
-    }
+}
 
-    private static func isPinyinByte(_ byte: UInt8) -> Bool {
-        (65...90).contains(byte) || (97...122).contains(byte) || byte == 39
+/// The input method can rewrite syllable separators or deliver several letters in one update.
+/// Compare only the letters in the marked text that the editor exposes.
+struct KuroCatComposition {
+    private var letters: [Character] = []
+
+    mutating func update(_ text: String?) -> [KuroCatKey] {
+        guard let text, !text.isEmpty else {
+            letters.removeAll()
+            return []
+        }
+        let compact = text.filter { !$0.isWhitespace && $0 != "'" && $0 != "’" }
+        // Some keyboards leave a selected word at the front of the marked range.
+        let next = compact.reversed().prefix { character in
+            character.isASCII && character.isLetter
+        }.reversed()
+        guard !next.isEmpty else {
+            letters.removeAll()
+            return []
+        }
+        let previous = letters
+        letters = Array(String(next).lowercased())
+        let prefix = zip(previous, letters).prefix { $0.0 == $0.1 }.count
+        let oldTail = previous.dropFirst(prefix)
+        let newTail = letters.dropFirst(prefix)
+        let suffix = zip(oldTail.reversed(), newTail.reversed()).prefix { $0.0 == $0.1 }.count
+        let inserted = newTail.dropLast(suffix)
+        if inserted.isEmpty, oldTail.count - suffix == 1 {
+            return KuroCatKey(legend: "⌫").map { [$0] } ?? []
+        }
+        return inserted.compactMap { KuroCatKey(character: $0) }
     }
 }
 
 struct KuroCatStroke: Equatable {
-    var revision = 0
-    var key: KuroCatKey?
+    private(set) var revision = 0
+    private(set) var keys: [KuroCatKey] = []
+
+    mutating func append(_ key: KuroCatKey) {
+        revision &+= 1
+        if keys.count == 64 { keys.removeFirst() }
+        keys.append(key)
+    }
 }

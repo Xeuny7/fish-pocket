@@ -87,6 +87,7 @@ struct NewSessionRequest: Equatable {
     var draft: String?
     /// A question written for the reader (询问 AI): sent as the conversation's first message.
     var prompt: String?
+    var createsDeskPet = false
 }
 
 /// A rename dialog for a session (the system alert) or a workspace (a sheet).
@@ -113,6 +114,7 @@ final class AppModel {
     /// This engine's conversations opened in this run (DSH's own, a Bot's chat, a group's), kept
     /// between visits as remote ones are. A new engine generation starts with none.
     @ObservationIgnored private(set) lazy var localSessions = SessionKeeper<SessionModel>()
+    let deskPetCreation = DeskPetCreation()
 
     private(set) var workspaces: [Workspace] = []
     private(set) var pinned: [String] = []
@@ -710,13 +712,13 @@ final class AppModel {
     /// A new conversation in `workspace`; a blank session already there is reused
     /// (the engine hands it back while it is still blank), so opening "new" twice adds nothing.
     /// `agentPreset` binds the new session to a preset; only a blank session already on it is reused.
-    func createSession(in workspace: Workspace, agentPreset: String? = nil) async throws -> String {
+    func createSession(in workspace: Workspace, agentPreset: String? = nil, reuseBlank: Bool = true) async throws -> String {
         var request: [String: JSON] = ["workspaceId": .string(workspace.id)]
         let reusable = workspace.sessionIds.first { id in
             guard let summary = sessions[id], summary.blank, !archived.contains(id) else { return false }
             return agentPreset == nil || presetId(of: id) == agentPreset
         }
-        if let reusable { request["sessionId"] = .string(reusable) }
+        if reuseBlank, let reusable { request["sessionId"] = .string(reusable) }
         if let agentPreset { request["agentPreset"] = .string(agentPreset) }
         let value = try await client.call("session/create", ["request": .object(request)])
         await refreshSessions()
