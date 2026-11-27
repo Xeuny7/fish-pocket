@@ -71,7 +71,6 @@ struct DrawerView: View {
     @State private var remoteMore = false
     @State private var searching = false
     @State private var phoneControl = PhoneControlService()
-    @State private var miniApps = MiniAppStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var removingWorkspace: Workspace?
     @State private var showNewWorkspace = false
@@ -119,7 +118,6 @@ struct DrawerView: View {
                     .padding(.top, 4)
                     .plainRow()
                 pluginsRow
-                miniAppsRow
                 deskPetRow
                 phoneControlRow
                 connectorsRow
@@ -139,7 +137,6 @@ struct DrawerView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     Task { await phoneControl.refresh() }
-                    miniApps.refresh()
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -404,25 +401,6 @@ struct DrawerView: View {
         .buttonStyle(.plain)
         .padding(.bottom, 2)
         .plainRow()
-    }
-
-    /// 我的应用: the small tools and games the agent made, which open without the engine.
-    private var miniAppsRow: some View {
-        Button { Haptics.tap(); app.miniAppsRequest = UUID() } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "apps.iphone").font(.callout).foregroundStyle(Palette.ink).frame(width: 22)
-                Text(MiniAppsPage.tabTitle).font(.subheadline).foregroundStyle(Palette.ink)
-                Spacer()
-                Text(miniApps.apps.isEmpty ? String(localized: "小工具和小游戏") : String(localized: "\(miniApps.apps.count) 个 Mini App")).font(.footnote).foregroundStyle(Palette.secondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 46)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, 2)
-        .plainRow()
-        .task { miniApps.refresh() }
     }
 
     private var deskPetRow: some View {

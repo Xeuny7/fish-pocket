@@ -126,6 +126,8 @@ final class AppModel {
     /// turn's first frames as the message just sent settles. Every other change to `sessions` is
     /// followed by `syncListed()`.
     private(set) var listed: [String: SessionSummary] = [:]
+    /// An empty catalog can guide startup only after a successful list request.
+    private(set) var hasLoadedSessionCatalog = false
     /// Live per-session projections from `session/control` (title, todos, inbox…), read through
     /// `control(_:_:)`. Each value is observed by itself: the Host sends a frame for every event
     /// it commits, a dozen in a turn's first second, and as one dictionary each of them redrew
@@ -172,8 +174,6 @@ final class AppModel {
     var phoneControlRequest: UUID?
     /// Open the 快捷指令 guide, the sidebar's row before iOS 18 on iPad (the root view consumes it).
     var shortcutsRequest: UUID?
-    /// The drawer's 我的应用 row: the shell opens the page.
-    var miniAppsRequest: UUID?
     /// A credential step to open (set through `requestCredentials`; the root view consumes it).
     var credentialRequest: (step: CredentialStep, token: UUID)?
     /// The session in the main view, kept by the root view (unread completions skip it).
@@ -407,6 +407,7 @@ final class AppModel {
             // runs after each event of a turn.
             completionUnread = completionUnread.intersection(next.keys)
             sessions = next
+            hasLoadedSessionCatalog = true
             childSessions = Dictionary(grouping: next.values.filter { $0.isSubagent && $0.parentId != nil }, by: { $0.parentId ?? "" })
                 .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt }.map(\.id) }
             reportRunning()

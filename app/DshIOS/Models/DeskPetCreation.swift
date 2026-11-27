@@ -47,9 +47,16 @@ final class DeskPetCreation {
             guard let app else { return }
             let saved = await collect(blocks, from: session, id: request.id)
             stopFollowing(sessionId, in: app)
-            if saved {
+            if saved, let pet = DeskPetLibrary.shared.pets.first(where: { $0.id == request.id }) {
                 requests[sessionId] = nil
-                app.showToast(String(localized: "宠物已加入桌宠外观"))
+                app.showToast(String(localized: "宠物已加入桌宠外观"), tone: .success, actions: [
+                    .init(label: String(localized: "预览宠物")) { DeskPetLibrary.shared.preview = pet },
+                    .init(label: String(localized: "立即使用")) {
+                        guard DeskPetLibrary.shared.pets.contains(where: { $0.id == pet.id }) else { return }
+                        UserDefaults.standard.set(pet.id.uuidString, forKey: PetDefaults.style)
+                        UserDefaults.standard.set(true, forKey: PetDefaults.enabled)
+                    },
+                ], duration: 10)
             } else {
                 requests[sessionId]?.saving = false
                 app.showToast(String(localized: "未收到可用的宠物素材。可在此会话重试。"), tone: .warning)

@@ -110,6 +110,8 @@ libgit2 的完整许可证见其仓库的 [COPYING](https://github.com/libgit2/l
 
 小黑猫的离线动画帧由 [KuroCat v1.5.2](https://github.com/chanke17/KuroCat/tree/v1.5.2) 的 Canvas 渲染器和经典黑猫皮肤生成。动画在应用内由 SwiftUI 播放。
 
+应用也随包提供 [KuroCat Workshop](https://github.com/chanke17/KuroCat-Workshop/tree/38aca454a93dde5db751496828798f52a1724bcb) 的 `spec.js` 和 `renderer.js`（MIT，Copyright (c) 2026 chanke17），用于在本地绘制用户从工坊选择的猫咪和键盘主题。许可证保存在渲染器资源目录。社区作品由原站按需下载，作者和来源随本地素材保留。工坊代码的 MIT 许可不适用于社区投稿素材。
+
 ```text
 MIT License
 

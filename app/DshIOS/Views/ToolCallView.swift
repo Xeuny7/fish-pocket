@@ -107,7 +107,7 @@ struct WorkRowLabel: View {
             ViewThatFits(in: .horizontal) {
                 if !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 4) {
-                        title.fixedSize(horizontal: true, vertical: false)
+                        title.lineLimit(1).fixedSize(horizontal: true, vertical: false)
                         if let detail {
                             Text("·").accessibilityHidden(true)
                             Text(detail).lineLimit(1).truncationMode(truncation)
@@ -140,7 +140,6 @@ struct WorkRowLabel: View {
         Text(text)
             .fontWeight(highlighted ? .medium : .regular)
             .foregroundStyle(highlighted ? Palette.ink : Palette.secondary)
-            .lineLimit(1)
             .truncationMode(truncation)
     }
 }

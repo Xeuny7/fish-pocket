@@ -255,7 +255,10 @@ struct MainView: View {
         // tab is not on screen: what finishes there meanwhile is marked unread, and the watch told.
         .onChange(of: tab) { _, tab in
             guard usesTabs else { return }
-            if tab != .sessions { navigationRevision = UUID() }
+            if tab != .sessions {
+                navigationRevision = UUID()
+                didOpenHome = true
+            }
             botOpen = tab == .bot
             app.currentSession = shownSession
         }
@@ -276,13 +279,13 @@ struct MainView: View {
         .inkTint()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
         .focusedSceneValue(\.windowCommands, windowCommands)
-        .task(id: workspace?.id) { launched() }
+        .task(id: app.hasLoadedSessionCatalog ? workspace?.id : nil) { launched() }
         .task(id: startupPending) {
             guard startupPending else { return }
-            // If the engine cannot supply the workspace catalog, leave the list available.
+            // Keep navigation available if either catalog is slow. A late baseline can
+            // still restore the last session while the local navigation is untouched.
             try? await Task.sleep(for: .seconds(12))
-            guard !Task.isCancelled else { return }
-            didOpenHome = true
+            guard !Task.isCancelled, !creating else { return }
             startupPending = false
         }
         .onChange(of: app.lastError) { _, error in
@@ -290,12 +293,6 @@ struct MainView: View {
         }
         // Which store this copy came from: only an App Store install is asked for a rating.
         .task { await AppDistribution.refresh() }
-        // The sidebar and shortcuts use the same Mini Apps destination.
-        .onChange(of: app.miniAppsRequest) { _, token in
-            guard token != nil, scenePhase != .background else { return }
-            app.miniAppsRequest = nil
-            openMiniApps()
-        }
         // The sidebar's 快捷指令 row (an iPad before iOS 18); elsewhere the page is under 探索.
         .onChange(of: app.shortcutsRequest) { _, token in
             guard token != nil, scenePhase != .background else { return }
@@ -414,34 +411,42 @@ struct MainView: View {
 
     /// Resolve the local destination before making the session stack visible.
     private func launched() {
-        guard !didOpenHome, let workspace, link == nil, followingLink == nil else { return }
+        guard !didOpenHome, app.hasLoadedSessionCatalog, let workspace, link == nil, followingLink == nil else { return }
         guard app.openRequest == nil, app.newSessionRequest == nil, app.botTeam.openRequest == nil else { return }
         didOpenHome = true
         guard canOpenLocalConversation, !creating else {
             startupPending = false
             return
         }
-        if isRestorable(lastLocalConversation) {
-            selection = lastLocalConversation
-            if usesTabs { showInTabs(lastLocalConversation) }
+        if let id = startupConversation {
+            selection = id
+            if usesTabs { showInTabs(id) }
             startupPending = false
         } else {
             newConversation(in: workspace, automatic: true, finishesStartup: true)
         }
     }
 
+    private var startupConversation: String? {
+        if isRestorable(lastLocalConversation) { return lastLocalConversation }
+        return app.sessions.values
+            .filter { !$0.blank }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .first { isRestorable($0.id) }?.id
+    }
+
     private func isRestorable(_ id: String) -> Bool {
         guard !id.isEmpty, !app.archived.contains(id), !app.botTeam.teamSessionIds.contains(id),
-              let session = app.sessions[id], !session.isSubagent, !session.migrationRequired,
-              let owner = app.workspace(of: id), !isTeamWorkspace(owner) else { return false }
-        return true
+              let session = app.sessions[id], !session.isSubagent, !session.migrationRequired else { return false }
+        // Removing a workspace leaves its conversations in the local ungrouped list.
+        return app.workspace(of: id).map { !isTeamWorkspace($0) } ?? true
     }
 
     private var canOpenLocalConversation: Bool {
         selection == nil && tab == .sessions && !botOpen && !storeOpen && sheet == nil && !webOpen
             && link == nil && followingLink == nil && app.openRequest == nil
             && app.newSessionRequest == nil && waitingForNewSession == nil
-            && app.botTeam.openRequest == nil && app.miniAppsRequest == nil
+            && app.botTeam.openRequest == nil
     }
 
     /// The conversation the user is looking at (`AppModel.currentSession`): on the tab bar, only
@@ -574,6 +579,9 @@ struct MainView: View {
             }
         }
         .sheet(item: $whatsNew) { WhatsNewSheet(release: $0) }
+        .sheet(item: Binding(get: { DeskPetLibrary.shared.preview }, set: { DeskPetLibrary.shared.preview = $0 })) { pet in
+            SheetStack { DeskPetPreview(pet: pet) }
+        }
         .modifier(ShellDialogs())
         .overlay { ShellNotices() }
         .overlay {
@@ -986,8 +994,10 @@ struct MainView: View {
         // gone until the next launch, and on iPhone Duo it came back put away.
         .environment(\.horizontalSizeClass, .regular)
         // Only while this tab is in front: a conversation archived from another one does not pull it here.
-        .task(id: didOpenHome && canOpenLocalConversation) {
-            if didOpenHome, canOpenLocalConversation { newConversation(in: workspace, automatic: true) }
+        .task(id: didOpenHome && app.hasLoadedSessionCatalog && canOpenLocalConversation) {
+            if didOpenHome, app.hasLoadedSessionCatalog, canOpenLocalConversation {
+                newConversation(in: workspace, automatic: true)
+            }
         }
     }
 

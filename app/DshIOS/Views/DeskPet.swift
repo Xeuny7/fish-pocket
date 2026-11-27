@@ -1,8 +1,19 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private enum PetActivity: Int, CaseIterable {
+enum PetActivity: Int, CaseIterable {
     case resting, thinking, playing, coding, searching, celebrating
+
+    var workshopName: String {
+        switch self {
+        case .resting: "resting"
+        case .thinking: "thinking"
+        case .playing: "playing"
+        case .coding: "coding"
+        case .searching: "searching"
+        case .celebrating: "celebrating"
+        }
+    }
 
     var title: LocalizedStringKey {
         switch self {
@@ -28,7 +39,7 @@ private enum PetActivity: Int, CaseIterable {
     }
 }
 
-private enum DeskPetStyle: Equatable {
+enum DeskPetStyle: Equatable {
     case rabbit, kuroCat, custom(StoredDeskPet)
 
     static let builtIn: [Self] = [.rabbit, .kuroCat]
@@ -62,15 +73,76 @@ private enum DeskPetStyle: Equatable {
         }
     }
 
-    @ViewBuilder
-    func sprite(activity: PetActivity, stroke: KuroCatStroke = KuroCatStroke()) -> some View {
+    @MainActor @ViewBuilder
+    var thumbnail: some View {
+        switch self {
+        case .rabbit:
+            Image("DeskRabbit-rest").resizable().scaledToFit()
+        case .kuroCat:
+            Image("DeskKuroCat-rest").resizable().scaledToFit()
+        case .custom(let pet):
+            CustomDeskPet(pet: pet, thumbnail: true).id(pet.id)
+        }
+    }
+
+    @MainActor @ViewBuilder
+    func sprite(activity: PetActivity, stroke: KuroCatStroke = KuroCatStroke(),
+                dragPosition: CGPoint? = nil, supportsDrag: Bool = false) -> some View {
         switch self {
         case .rabbit:
             PetSprite(activity: activity).transition(.identity)
         case .kuroCat:
-            KuroCatSprite(activity: activity, stroke: stroke).transition(.identity)
+            if supportsDrag || DeskPetLibrary.shared.keyboard != nil {
+                DraggableKuroCat(keyboard: DeskPetLibrary.shared.keyboard, activity: activity, stroke: stroke,
+                                 dragPosition: dragPosition)
+                    .transition(.identity)
+            } else {
+                KuroCatSprite(activity: activity, stroke: stroke).transition(.identity)
+            }
         case .custom(let pet):
-            CustomDeskPet(pet: pet).id(pet.id).transition(.identity)
+            if pet.workshop != nil, let skin = DeskPetLibrary.shared.skinJSON(for: pet) {
+                KuroWorkshopScene(skin: skin, keyboard: DeskPetLibrary.shared.keyboard,
+                                  activity: activity.workshopName, stroke: stroke, dragPosition: dragPosition)
+                    .id(pet.id).transition(.identity)
+            } else {
+                CustomDeskPet(pet: pet).id(pet.id).transition(.identity)
+            }
+        }
+    }
+}
+
+/// Keep the drag renderer loaded so the first movement can lift the cat immediately.
+private struct DraggableKuroCat: View {
+    let keyboard: WorkshopKeyboard?
+    let activity: PetActivity
+    let stroke: KuroCatStroke
+    let dragPosition: CGPoint?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var ready = false
+    @State private var settling = false
+
+    var body: some View {
+        let dragging = dragPosition != nil
+        let showScene = ready && (keyboard != nil || dragging || settling)
+        ZStack {
+            if !showScene {
+                KuroCatSprite(activity: activity, stroke: stroke)
+            }
+            KuroWorkshopScene(skin: nil, keyboard: keyboard, activity: activity.workshopName, stroke: stroke,
+                              animate: keyboard != nil || dragging || settling, dragPosition: dragPosition,
+                              onReady: { ready = $0 })
+                .opacity(showScene ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .task(id: dragging) {
+            if dragging {
+                settling = !reduceMotion
+            } else if settling {
+                do { try await Task.sleep(for: .milliseconds(450)) }
+                catch { return }
+                settling = false
+            }
         }
     }
 }
@@ -78,8 +150,17 @@ private enum DeskPetStyle: Equatable {
 enum PetDefaults {
     static let style = "dsh.deskPet.style"
     static let enabled = "dsh.deskPet.enabled"
+    @MainActor
+    static var kuroCatSelected: Bool {
+        let selected = UserDefaults.standard.string(forKey: style)
+        return selected == "kuroCat" || DeskPetLibrary.shared.pets.contains {
+            $0.workshop != nil && $0.id.uuidString == selected
+        }
+    }
+
+    @MainActor
     static var kuroCatEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabled) && UserDefaults.standard.string(forKey: style) == "kuroCat"
+        UserDefaults.standard.bool(forKey: enabled) && kuroCatSelected
     }
     static let size = "dsh.deskPet.size"
     static let x = "dsh.deskPet.x"
@@ -281,7 +362,12 @@ private struct ActiveDeskPet: View {
             if let (bounds, origin) = placement(in: geometry, x: physicalX) {
                 let current = activity
                 let center = drag.flatMap { bounds.nearest(dragTarget($0, origin: origin)) } ?? origin
-                style.sprite(activity: current, stroke: model.composer.kuroCatStroke)
+                let dragPosition = drag.map { value in
+                    CGPoint(x: value.translation.width / bounds.dimensions.width,
+                            y: value.translation.height / bounds.dimensions.height)
+                }
+                style.sprite(activity: current, stroke: model.composer.kuroCatStroke,
+                             dragPosition: dragPosition, supportsDrag: true)
                     .frame(width: bounds.dimensions.width, height: bounds.dimensions.height)
                     .contentShape(PetHitArea(footprint: bounds.footprint))
                     .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named(canvas))
@@ -340,13 +426,17 @@ struct DeskPetSettingsPage: View {
         List {
             Section {
                 Toggle("显示桌宠", isOn: $enabled)
-                Picker("桌宠外观", selection: $style) {
-                    ForEach(DeskPetStyle.builtIn, id: \.id) { option in
-                        option.title.tag(option.id)
-                    }
-                    ForEach(DeskPetLibrary.shared.pets) { pet in
-                        Text(verbatim: pet.name).tag(pet.id.uuidString)
-                    }
+            }
+            .groupedRow()
+            Section("桌宠外观") {
+                DeskPetGallery(style: $style, enabled: $enabled)
+            }
+            .groupedRow()
+            Section {
+                NavigationLink {
+                    KuroWorkshopView()
+                } label: {
+                    Label("KuroCat 工坊", systemImage: "paintpalette")
                 }
                 Button { choosingFile = true } label: {
                     Label("导入宠物", systemImage: "square.and.arrow.down")
@@ -409,6 +499,7 @@ struct DeskPetSettingsPage: View {
 
 private struct CustomDeskPet: View {
     let pet: StoredDeskPet
+    var thumbnail = false
     @State private var image: UIImage?
 
     var body: some View {
@@ -417,7 +508,10 @@ private struct CustomDeskPet: View {
         }
         .task(id: pet.id) {
             let url = DeskPetLibrary.shared.imageURL(for: pet)
-            let picture = await Task.detached(priority: .userInitiated) { DeskPetLibrary.picture(at: url) }.value
+            let preview = thumbnail
+            let picture = await Task.detached(priority: .userInitiated) {
+                DeskPetLibrary.picture(at: url, thumbnail: preview)
+            }.value
             if !Task.isCancelled { image = picture }
         }
     }
